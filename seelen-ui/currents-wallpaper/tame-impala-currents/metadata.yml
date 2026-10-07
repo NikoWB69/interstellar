@@ -1,0 +1,16 @@
+id: "@user/tame-impala-currents"
+metadata:
+  displayName: Tame Impala - Currents
+  description: >-
+    Seamless 24s animated loop inspired by the Currents album art: a chrome
+    ball parting purple flow lines into a turbulent wake, with the red streak
+    turning to an orange ribbon behind it.
+  tags:
+    - tame impala
+    - currents
+    - animated
+    - video
+    - purple
+type: Video
+filename: currents.mp4
+thumbnailFilename: thumbnail.jpg
