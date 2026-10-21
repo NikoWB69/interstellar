@@ -65,6 +65,7 @@ button:focus-visible{outline:2px solid var(--ember);outline-offset:2px}
 
 .panel{position:fixed;top:calc(env(safe-area-inset-top,0px) + 56px);right:max(16px,env(safe-area-inset-right,0px));width:min(340px,calc(100vw - 32px));
   background:rgba(16,10,11,.95);border:1px solid rgba(234,223,207,.18);padding:14px;display:grid;gap:14px;z-index:5}
+.panel[hidden]{display:none}
 .prow{display:grid;gap:7px}
 .plabel{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ash);display:flex;justify-content:space-between}
 .plabel b{color:var(--bone);font-family:var(--f-mono);font-weight:500;letter-spacing:0}
@@ -73,6 +74,10 @@ button:focus-visible{outline:2px solid var(--ember);outline-offset:2px}
 .seg button[aria-pressed="true"]{border-color:var(--blood);background:rgba(86,7,17,.75);color:#fff}
 .pdesc{margin:0;font-size:12px;line-height:1.5;color:#b8aa9d}
 input[type=range]{width:100%;accent-color:var(--blood)}
+.toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 120px);transform:translateX(-50%);pointer-events:none;opacity:0;
+  font-size:13px;letter-spacing:.22em;text-transform:uppercase;color:#fff;background:rgba(120,8,18,.85);padding:6px 14px;white-space:nowrap}
+.toast.show{animation:toast 1.8s ease forwards}
+@keyframes toast{0%{opacity:0;transform:translate(-50%,-6px)}10%{opacity:1;transform:translate(-50%,0)}75%{opacity:1}100%{opacity:0}}
 .hint{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 96px);font-size:12px;color:var(--ash);
   letter-spacing:.04em;pointer-events:none;text-align:center;width:min(92vw,560px);text-shadow:0 1px 4px #000}
 
@@ -156,12 +161,20 @@ input[type=range]{width:100%;accent-color:var(--blood)}
     <p class="pdesc">Below what a body part can take, a slash leaves a gash instead of cutting through. Repeated gashes weaken the part. Cleave always cuts through.</p>
   </div>
   <div class="prow">
+    <span class="plabel">Cut depth</span>
+    <div class="seg" id="segSpeed" role="group" aria-label="Cut depth">
+      <button data-v="on">Drag speed sets it</button><button data-v="off">Always full</button>
+    </div>
+    <p class="pdesc">With drag speed on, a quick flick cuts through and a slow drag slices the skin. Slice slowly across the throat to slit it.</p>
+  </div>
+  <div class="prow">
     <span class="plabel">Blade</span>
     <div class="seg" id="segBlade" role="group" aria-label="Blade">
       <button data-v="live">Follows cursor</button><button data-v="release">Cut on release</button>
     </div>
   </div>
 </section>
+<div class="toast" id="toast" aria-live="polite"></div>
 <div id="callout"><div class="ck"></div><div class="cn"></div></div>
 
 <div class="intro" id="intro">
@@ -170,7 +183,7 @@ input[type=range]{width:100%;accent-color:var(--blood)}
     <div class="sub">Malevolent Shrine</div>
     <p>A test subject with full human anatomy stands in your domain: skin, fat, muscle, bone, and every major organ. Every cut slices through the real layers, so you see ribs, lungs, heart, gut and marrow in cross-section.</p>
     <dl class="ctl">
-      <dt>解</dt><dd><b>Dismantle.</b> Drag across the body. The cut follows your cursor exactly. Tap for a small nick.</dd>
+      <dt>解</dt><dd><b>Dismantle.</b> Drag across the body and the cut follows your cursor. Flick fast to cut through, drag slowly to slice. Where it lands matters: throat, eyes, belly, knees and arteries each react differently.</dd>
       <dt>捌</dt><dd><b>Cleave.</b> Tap a body part and it gets carved into chunks.</dd>
       <dt>開</dt><dd><b>Fuga.</b> Tap to fire a flame arrow that burns and blasts.</dd>
       <dt>領域</dt><dd><b>Domain Expansion.</b> Press 4 for four seconds of nonstop slashes.</dd>
@@ -257,10 +270,10 @@ const JOINTS = [
   ['neck','chest',0,-302,-0.35,0.35,0.2],
   ['chest','abdomen',0,-239,-0.3,0.3,0.12],
   ['abdomen','pelvis',0,-204,-0.3,0.3,0.12],
-  ['chest','upperArmL',-35.5,-297,-0.4,2.9,1.3],
-  ['chest','upperArmR',35.5,-297,-2.9,0.4,1.3],
-  ['upperArmL','forearmL',-42,-242,-2.3,0.15,1.0],
-  ['upperArmR','forearmR',42,-242,-0.15,2.3,1.0],
+  ['chest','upperArmL',-35.5,-297,-1.2,2.9,1.3],
+  ['chest','upperArmR',35.5,-297,-2.9,1.2,1.3],
+  ['upperArmL','forearmL',-42,-242,-2.8,0.15,1.0],
+  ['upperArmR','forearmR',42,-242,-0.15,2.8,1.0],
   ['forearmL','handL',-45.5,-187,-0.9,0.9,0.6],
   ['forearmR','handR',45.5,-187,-0.9,0.9,0.6],
   ['pelvis','thighL',-13,-180,-0.5,1.4,0.45],
@@ -665,6 +678,7 @@ function buildTextures(){
 let pieces=[], joints=[], nextId=1, grab=null;
 const state = { alive:true, fallen:false, blood:100, cuts:0, reason:'Subject is standing', flail:0, t:0, standX:0, pelvisY:0,
   pain:0, pendingPain:0, moanT:2, face:{pain:0,scream:0,fear:0,fade:0,tears:0,mouthBlood:0},
+  throat:false, blind:{'-1':false,'1':false}, lung:false, belly:false, clutch:0, beatT:0, beatNo:0,
   heartComp:-1, hitstop:0, shake:0, knock:0 };
 
 function buildPaths(p){
@@ -708,8 +722,9 @@ function spawn(){
   for (const j of JOINTS) joints.push({ a:map[j[0]], b:map[j[1]], jx:j[2], jy:j[3], lo:j[4], hi:j[5], flail:j[6], phase:Math.random()*TAU,
     side: sideOf(j[1]), kind: baseOf(j[1]) });
   Object.assign(state, { alive:true, fallen:false, blood:100, cuts:0, reason:'Subject is standing', flail:0, hitstop:0, shake:0, knock:0, standX:0,
-    pain:0, pendingPain:0, moanT:2, face:{pain:0,scream:0,fear:0,fade:0,tears:0,mouthBlood:0} });
-  voice.stop(true);
+    pain:0, pendingPain:0, moanT:2, face:{pain:0,scream:0,fear:0,fade:0,tears:0,mouthBlood:0},
+    throat:false, blind:{'-1':false,'1':false}, lung:false, belly:false, clutch:0, beatT:0 });
+  voice.stop(true); ropes.length=0;
   state.pelvisY = map.pelvis.y;
   particles.length=0; fxs.length=0; queue.length=0; arrow=null;
   clearWorldLayers();
@@ -758,7 +773,14 @@ function cutPiece(p, wx, wy, dx, dy, push){
     k.vx+=nx*side*f + dx*push*0.15; k.vy+=ny*side*f + dy*push*0.15;
     k.w+=rnd(-1,1)*push*0.01;
   }
-  const idx=pieces.indexOf(p); pieces.splice(idx,1,kids[0],kids[1]);
+  const idx=pieces.indexOf(p); pieces.splice(idx,1,kids[0],kids[1]); p.gone=true;
+  if (p.seg==='abdomen' && Math.abs(Dx*(-212-Py)-Dy*(0-Px))<13){
+    for (const k of kids){
+      const e=k.cutEdges.find(e=>Math.abs(Dx*(e[1]-Py)-Dy*(e[0]-Px))<0.05 && Math.abs(Dx*(e[3]-Py)-Dy*(e[2]-Px))<0.05);
+      if (e && e[4]>12 && Math.random()<0.85) spillGuts(k,(e[0]+e[2])/2+e[5]*1.5,(e[1]+e[3])/2+e[6]*1.5);
+    }
+    if (state.alive && p.comp===state.heartComp) state.belly=true;
+  }
   for (const j of joints){
     for (const end of ['a','b']){
       if (j[end]!==p) continue;
@@ -832,6 +854,7 @@ function addWound(p, worldPts, depth){
   rest=resample(rest,1.5);
   const wd={pts:rest,len,depth,w:0.9+2*depth,bleed:1,frame:-1}; wd.path=lensPath(rest,wd.w);
   p.wounds.push(wd); p.damage+=depth*0.35*Math.min(1,len/25);
+  woundEffects(p,wd);
   if (state.alive && p.comp===state.heartComp) state.pendingPain+=0.05+0.28*depth*Math.min(1,len/20);
   for (let i=0;i<Math.min(10,len*0.6);i++){ const q=rest[(Math.random()*rest.length)|0], [wx,wy]=toWorld(p,q[0],q[1]);
     addP({k:0,x:wx,y:wy,vx:p.vx+rnd(-60,60),vy:p.vy+rnd(-90,10),life:rnd(0.4,1.1),r:rnd(0.5,1.4),col:BLOODS[(Math.random()*4)|0]}); }
@@ -858,13 +881,12 @@ function cutPath(path, opt={}){
         const kids=cutPiece(p,a[0],a[1],(b[0]-a[0])/chord,(b[1]-a[1])/chord,push);
         if (kids){ hits++; opt.onTouch && kids.forEach(opt.onTouch); }
       } else {
-        const depth=clamp(power/req,0.08,0.92), n=Math.max(2,Math.round(full.pts.length*depth));
-        const pts=resample(full.pts,2); const cut=pts.slice(0,Math.max(2,Math.round(pts.length*depth)));
-        if (addWound(p,cut,depth)) hits++;
-        opt.onTouch && opt.onTouch(p); void n;
+        if (addWound(p,full.pts,clamp(power/req,0.08,0.92))) hits++;
+        opt.onTouch && opt.onTouch(p);
       }
     } else if (opt.final){
-      for (const sp of spans){ if (addWound(p,sp.pts,clamp(power,0.25,0.9)*0.7)) hits++; }
+      for (const sp of spans){ let L=0; for (let i=1;i<sp.pts.length;i++) L+=Math.hypot(sp.pts[i][0]-sp.pts[i-1][0],sp.pts[i][1]-sp.pts[i-1][1]);
+        if (addWound(p,sp.pts,clamp(power/requiredPower(p,L),0.08,0.92))) hits++; }
       opt.onTouch && opt.onTouch(p);
     }
   }
@@ -890,6 +912,95 @@ function slash(x1,y1,x2,y2,opt={}){
   const h=cutPath([[x1,y1],[x2,y2]],{...opt, final:true});
   markWorld(x1,y1,x2,y2,opt.faint);
   return h;
+}
+
+/* ---- where a gash lands decides what it does ---- */
+const EYES=[[-6.4,-336],[6.4,-336]];
+let toastTimer=0;
+function toast(msg){ const el=document.getElementById('toast'); el.textContent=msg; el.classList.remove('show'); void el.offsetWidth; el.classList.add('show'); }
+function woundNear(wd,x,y,r){ return wd.pts.some(q=>Math.hypot(q[0]-x,q[1]-y)<r); }
+function woundEffects(p, wd){
+  const base=baseOf(p.seg), d=wd.depth, mid=wd.pts[(wd.pts.length/2)|0], living=state.alive && p.comp===state.heartComp;
+  if (base==='neck' && d>=0.25 && wd.len>=5){
+    wd.art=clamp(d*1.6,0.45,1);
+    if (living && !state.throat){ state.throat=true; state.face.mouthBlood=1; state.pendingPain+=0.5; voice.stop(false); toast('Throat slit'); }
+  }
+  if (base==='head') EYES.forEach(([ex,ey],i)=>{ const side=i?1:-1;
+    if (!state.blind[side] && woundNear(wd,ex,ey,3.6)){ state.blind[side]=true; if (living){ state.pendingPain+=0.6; toast(side<0?'Right eye cut':'Left eye cut'); } } });
+  if (base==='abdomen' && d>=0.3 && wd.len>=10){ spillGuts(p,mid[0],mid[1]); if (living){ state.belly=true; state.pendingPain+=0.5; toast('Disemboweled'); } }
+  if (base==='chest' && d>=0.55 && wd.len>=8 && !state.lung){ state.lung=true; state.face.mouthBlood=Math.min(1,state.face.mouthBlood+0.5); if (living) toast('Lung punctured'); }
+  const knee=(base==='thigh' && mid[1]>-125) || (base==='shin' && mid[1]<-82), ankle=base==='shin' && mid[1]>-42;
+  if ((knee||ankle) && d>=0.35 && living && !state.fallen){ state.fallen=true; state.reason=ankle?'Achilles tendon cut':'Hamstrung'; toast(state.reason); }
+  if (base==='thigh' && d>=0.4 && Math.abs(mid[0])<14){ wd.art=0.8; if (living) toast('Femoral artery cut'); }
+  if (base==='upperArm' && d>=0.45) wd.art=0.5;
+  if (base==='forearm' && d>=0.35 && mid[1]>-212) wd.art=0.3;
+}
+const ropes=[];
+function spillGuts(p, rx, ry){
+  if (ropes.length>=8) return;
+  const [ax,ay]=toWorld(p,rx,ry);
+  const mk=(colon)=>{ const r={p,rx:rx+rnd(-2,2),ry,pts:[],target:Math.round(colon?rnd(18,28):rnd(48,70)),grow:0,seg:colon?3.6:3,
+    w:colon?5.4:3.8,col:colon?COL.colon:COL.intestine,edge:colon?'#6a3a26':'#6d2e26',ph:rnd(0,TAU)};
+    for (let i=0;i<3;i++) r.pts.push({x:ax+rnd(-1,1),y:ay+i*2,px:ax,py:ay+i*2}); ropes.push(r); };
+  mk(false); if (Math.random()<0.6) mk(true);
+  sfx.flesh();
+}
+function updateRopes(dt){
+  for (const r of ropes){
+    if (r.p && r.p.gone) r.p=pieces.find(q=>q.seg==='abdomen' && pointInPoly(r.rx,r.ry,q.v)) || null;
+    let ax=0, ay=0; if (r.p) [ax,ay]=toWorld(r.p,r.rx,r.ry);
+    if (r.p && r.pts.length<r.target){ r.grow+=dt; while (r.grow>0.045 && r.pts.length<r.target){ r.grow-=0.045; r.pts.splice(1,0,{x:ax+rnd(-0.5,0.5),y:ay+0.5,px:ax,py:ay}); } }
+    const g=G*0.8*dt*dt;
+    for (let i=r.p?1:0;i<r.pts.length;i++){
+      const q=r.pts[i], vx=(q.x-q.px)*0.985, vy=(q.y-q.py)*0.985; q.px=q.x; q.py=q.y; q.x+=vx; q.y+=vy+g;
+      if (q.y>-1.6){ q.y=-1.6; q.px=q.x-vx*0.4; }
+    }
+    if (r.p){ const q=r.pts[0]; q.x=q.px=ax; q.y=q.py=ay; }
+    for (let it=0;it<8;it++) for (let i=0;i<r.pts.length-1;i++){
+      const a=r.pts[i], b=r.pts[i+1], dx=b.x-a.x, dy=b.y-a.y, d=Math.hypot(dx,dy)||1e-4, diff=(d-r.seg)/d, pin=i===0&&r.p, wa=pin?0:0.5, wb=pin?1:0.5;
+      a.x+=dx*diff*wa; a.y+=dy*diff*wa; b.x-=dx*diff*wb; b.y-=dy*diff*wb;
+    }
+    if (Math.random()<dt*4){ const q=r.pts[(Math.random()*r.pts.length)|0]; addP({k:0,x:q.x,y:q.y,vx:rnd(-5,5),vy:rnd(0,20),life:rnd(0.5,1),r:rnd(0.5,1.1),col:BLOODS[1]}); }
+  }
+}
+function drawRopes(){
+  for (const r of ropes){
+    const n=r.pts.length; if (n<2) continue;
+    // offset each point sideways so the strand reads as coiled bowel rather than a straight cord
+    const P=r.pts.map((q,i)=>{ const a=r.pts[Math.max(0,i-1)], b=r.pts[Math.min(n-1,i+1)]; let tx=b.x-a.x, ty=b.y-a.y; const l=Math.hypot(tx,ty)||1;
+      const o=(i===0?0:Math.sin(i*0.85+r.ph)*r.w*0.6); return [OX+(q.x-ty/l*o)*S, OY+(q.y+tx/l*o)*S]; });
+    const tr=()=>{ ctx.beginPath(); ctx.moveTo(P[0][0],P[0][1]); for (let i=1;i<n-1;i++) ctx.quadraticCurveTo(P[i][0],P[i][1],(P[i][0]+P[i+1][0])/2,(P[i][1]+P[i+1][1])/2); ctx.lineTo(P[n-1][0],P[n-1][1]); };
+    ctx.lineCap='round'; ctx.lineJoin='round';
+    tr(); ctx.strokeStyle=r.edge; ctx.lineWidth=(r.w+1)*S; ctx.stroke();
+    ctx.strokeStyle=r.col; ctx.lineWidth=r.w*S; ctx.stroke();
+    ctx.strokeStyle='rgba(255,235,225,.28)'; ctx.lineWidth=r.w*0.25*S; ctx.stroke();
+    ctx.strokeStyle='rgba(110,40,30,.45)'; ctx.lineWidth=0.35*S;
+    for (let i=1;i<n-1;i++){ const a=P[i-1], b=P[i+1], dx=b[0]-a[0], dy=b[1]-a[1], l=Math.hypot(dx,dy)||1, h=r.w*0.5*S;
+      ctx.beginPath(); ctx.moveTo(P[i][0]-dy/l*h,P[i][1]+dx/l*h); ctx.lineTo(P[i][0]+dy/l*h,P[i][1]-dx/l*h); ctx.stroke(); }
+  }
+}
+// Heartbeat: cut arteries spurt on every beat while the heart is still connected.
+function heartbeat(dt){
+  if (!state.alive) return;
+  const bpm=72+50*clamp(state.pain,0,1)+50*clamp((100-state.blood)/60,0,1);
+  state.beatT+=dt*bpm/60; if (state.beatT<1) return; state.beatT-=1; state.beatNo++;
+  for (const p of pieces){
+    if (p.comp!==state.heartComp) continue;
+    for (const wd of p.wounds){
+      if (!wd.art || wd.beat===state.beatNo) continue;
+      const m=wd.pts[(wd.pts.length/2)|0]; if (!pointInPoly(m[0],m[1],p.v)) continue;
+      wd.beat=state.beatNo;
+      const str=wd.art*clamp(state.blood/100,0.25,1), [wx,wy]=toWorld(p,m[0],m[1]);
+      const a0=wd.pts[0], a1=wd.pts[wd.pts.length-1], la=Math.atan2(a1[1]-a0[1],a1[0]-a0[0])+p.a;
+      const nx=-Math.sin(la), ny=Math.cos(la), n=Math.round(10+22*str);
+      for (let i=0;i<n;i++){
+        const side=Math.random()<0.5?1:-1, sp=rnd(110,340)*str;
+        addP({k:0,x:wx,y:wy,vx:p.vx+(nx*side+rnd(-0.35,0.35))*sp,vy:p.vy+(ny*side-0.45+rnd(-0.3,0.3))*sp,life:rnd(0.5,1.3),r:rnd(0.7,1.9),col:BLOODS[(Math.random()*4)|0]});
+      }
+      state.blood=Math.max(0,state.blood-4.2*wd.art*subject.drain);
+      wd.art*=0.99;
+    }
+  }
 }
 
 /* ---- connectivity & vitals ---- */
@@ -924,6 +1035,7 @@ function updateVitals(){
     const ok = pelvis && pelvis.comp===state.heartComp && state.knock<=0 &&
       pieces.some(p=>p.seg==='footL' && p.comp===state.heartComp) && pieces.some(p=>p.seg==='footR' && p.comp===state.heartComp);
     if (!ok){ state.fallen=true; state.reason = state.knock>0 ? 'Knocked down' : 'Lost the ability to stand'; }
+    else if (state.blood<50){ state.fallen=true; state.reason='Collapsed from blood loss'; toast('Collapsed'); }
   }
 }
 
@@ -997,6 +1109,16 @@ function physicsStep(dt){
     p.x+=p.vx*dt; p.y+=p.vy*dt; p.a+=p.w*dt;
   }
 }
+function clutchTarget(){ return state.throat ? [2.5,-295] : (state.blind['-1']||state.blind['1']) ? [3.5,-317] : [6,-210]; }
+function armIK(side, T){
+  const S=[35.5*side,-297], E=[42*side,-242], W=[45.5*side,-187], tx=T[0]+side*3.5, ty=T[1];
+  const l1=Math.hypot(E[0]-S[0],E[1]-S[1]), l2=Math.hypot(W[0]-E[0],W[1]-E[1]);
+  const d=clamp(Math.hypot(tx-S[0],ty-S[1]),Math.abs(l1-l2)+1,l1+l2-1);
+  const a=Math.acos(clamp((l1*l1+d*d-l2*l2)/(2*l1*d),-1,1)), base=Math.atan2(ty-S[1],tx-S[0]), au=base-side*a;
+  const ex=S[0]+Math.cos(au)*l1, ey=S[1]+Math.sin(au)*l1, af=Math.atan2(ty-ey,tx-ex);
+  const ru=wrapA(au-Math.atan2(E[1]-S[1],E[0]-S[0])), rf=wrapA(af-Math.atan2(W[1]-E[1],W[0]-E[0])-ru);
+  return [ru,rf];
+}
 function control(dt){
   const st=state;
   if (st.alive){
@@ -1007,7 +1129,11 @@ function control(dt){
       let target=0;
       if (j.kind==='upperArm') target=j.side*-0.1+0.05*Math.sin(st.t*1.4);
       if (j.kind==='forearm') target=j.side*0.18;
-      target+=fl*j.flail*Math.sin(st.t*(standing?13:9)+j.phase);
+      target+=fl*(1-st.clutch*0.75)*j.flail*Math.sin(st.t*(standing?13:9)+j.phase);
+      if (st.clutch>0.01 && (j.kind==='upperArm'||j.kind==='forearm')){
+        const ik=armIK(j.side,clutchTarget());
+        target+=((j.kind==='upperArm'?ik[0]:ik[1])+0.04*Math.sin(st.t*17+j.phase)-target)*st.clutch;
+      }
       target=clamp(target,j.lo,j.hi);
       const A=j.a, B=j.b, rel=wrapA(B.a-A.a), relW=B.w-A.w, em=1/(A.iI+B.iI);
       const L=(k*(target-rel)-d*relW)*dt*em; A.w-=A.iI*L; B.w+=B.iI*L;
@@ -1100,24 +1226,24 @@ const SUBJECTS={
   athlete:{tough:1.6,drain:0.8,pain:0.8,pitch:0.92,stoic:0.4,desc:'Dense muscle. Full-power Dismantle takes off limbs but only gashes the torso and head. Grunts through small cuts.'},
   sorcerer:{tough:3.4,drain:0.55,pain:0.55,pitch:0.86,stoic:0.8,desc:'Cursed energy reinforces the body. Dismantle mostly leaves gashes until a part is worn down. Cleave adapts and still cuts. Barely screams.'},
 };
-const SEG_RES={head:0.95,neck:0.6,chest:0.95,abdomen:0.8,pelvis:0.9,upperArm:0.75,forearm:0.7,hand:0.55,thigh:0.9,shin:0.8,foot:0.6};
-const settings={subject:'average',power:100,blade:'live'};
+const SEG_RES={head:0.95,neck:0.9,chest:0.95,abdomen:0.8,pelvis:0.9,upperArm:0.75,forearm:0.7,hand:0.55,thigh:0.9,shin:0.8,foot:0.6};
+const settings={subject:'average',power:100,blade:'live',speed:true};
 try{ Object.assign(settings, JSON.parse(localStorage.getItem('shrine-settings')||'{}')); }catch(e){}
 if (!SUBJECTS[settings.subject]) settings.subject='average';
 let subject=SUBJECTS[settings.subject];
 function saveSettings(){ try{ localStorage.setItem('shrine-settings',JSON.stringify(settings)); }catch(e){} }
 const dPower=()=>settings.power/100;
-function requiredPower(p, chord){ return subject.tough*SEG_RES[baseOf(p.seg)]*clamp(chord/40,0.4,1.1)*(1-Math.min(0.6,p.damage)); }
+function requiredPower(p, chord){ return subject.tough*SEG_RES[baseOf(p.seg)]*clamp(chord/40,0.4,1.0)*(1-Math.min(0.6,p.damage)); }
 const DOMAIN_CD=12;
 
 function markPath(path, faint){ for (let i=0;i<path.length-1;i++) markWorld(path[i][0],path[i][1],path[i+1][0],path[i+1][1],faint,true); }
-function dismantlePath(path){
+function dismantlePath(path, power){
   fxs.push({kind:'path',pts:path.slice(),w:4,t:0,life:0.4}); sfx.slash();
-  cutPath(path,{push:50,final:true}); markPath(path,false);
+  cutPath(path,{push:50,final:true,power:power??dPower()}); markPath(path,false);
   if (Math.random()<0.5 || !callout.recent()) callout.show('解','Dismantle');
 }
 function dismantle(x1,y1,x2,y2){ dismantlePath([[x1,y1],[x2,y2]]); }
-function quickDismantle(x,y){ const a=rnd(0,Math.PI), ux=Math.cos(a)*9, uy=Math.sin(a)*9; dismantlePath([[x-ux,y-uy],[x+ux,y+uy]]); }
+function quickDismantle(x,y){ const a=rnd(0,Math.PI), ux=Math.cos(a)*9, uy=Math.sin(a)*9; dismantlePath([[x-ux,y-uy],[x+ux,y+uy]],dPower()*0.5); }
 let famCounter=1;
 function cleave(target){
   const fam=++famCounter; target.fam=fam; callout.show('捌','Cleave'); state.shake+=3;
@@ -1385,8 +1511,18 @@ const voice={
     this.play('whimper',[vkey(0,{f0:f*0.8,F:V5.ee,asp:0.3,tilt:0.5}),vkey(0.08,{f0:f,amp:0.5,F:V5.ee,asp:0.4,tilt:0.5,vib:0.03,jit:0.04,oq:0.6}),
       vkey(0.4,{f0:f*1.08,amp:0.45,F:V5.ih,asp:0.4,tilt:0.5,vib:0.035,jit:0.05,oq:0.6}),vkey(0.65,{f0:f*0.8,amp:0.2,F:V5.uh,asp:0.4,tilt:0.55}),vkey(0.8,{f0:f*0.7,F:V5.uh})]); },
   gasp(){ this.play('gasp',[vkey(0,{f0:300}),vkey(0.04,{f0:320,amp:0.04,asp:0.9,F:V5.ah,tilt:0.7}),vkey(0.24,{f0:330,amp:0.04,asp:0.7,F:V5.uh,tilt:0.7}),vkey(0.34,{f0:330})]); },
+  gurgle(){
+    const f=rnd(110,150)*subject.pitch, d=rnd(0.7,1.3), K=[vkey(0,{f0:f,F:V5.uh})];
+    for (let t=0.03;t<d;t+=rnd(0.04,0.08)) K.push(vkey(t,{f0:f*rnd(0.8,1.3),amp:rnd(0.15,0.9),asp:rnd(0.4,0.9),F:pick([V5.uh,V5.oh,V5.ah]),rough:0.9,sub:0.6,oq:0.6,tilt:0.45,jit:0.08}));
+    K.push(vkey(d+0.1,{f0:f*0.7,F:V5.uh})); this.play('gurgle',K);
+  },
+  wheeze(){ const f=rnd(600,780);
+    this.play('wheeze',[vkey(0,{f0:f,F:V5.ee}),vkey(0.06,{f0:f,amp:0.12,asp:0.8,F:V5.ee,tilt:0.6,jit:0.05}),vkey(0.4,{f0:f*1.1,amp:0.1,asp:0.7,F:V5.ih,tilt:0.6}),
+      vkey(0.5,{f0:140,amp:0.3,asp:0.6,F:V5.uh,rough:0.8,sub:0.5,oq:0.6,tilt:0.45}),vkey(0.85,{f0:120,amp:0.2,asp:0.5,F:V5.oh,rough:0.8,sub:0.5}),vkey(0.95,{f0:110,F:V5.oh})]); },
   ambient(){
     const p=state.pain, w=this.weak();
+    if (state.throat){ Math.random()<0.65 ? this.gurgle() : this.gasp(); return; }
+    if (state.lung && Math.random()<0.4){ this.wheeze(); return; }
     if (w<0.45){ Math.random()<0.6 ? this.groan() : this.gasp(); return; }
     if (subject.stoic>0.6){ Math.random()<0.5 ? this.groan() : (p>0.8 ? this.scream(rnd(0.4,0.7),true) : this.gasp()); return; }
     if (p>0.75) Math.random()<0.75 ? this.scream(rnd(0.45,0.85)) : this.sob();
@@ -1395,6 +1531,7 @@ const voice={
   },
   hurtScream(I){
     const n=this.now();
+    if (state.throat){ if (!(this.busy() && this.kind==='gurgle')) this.gurgle(); return; }
     // already mid-scream: let it ride instead of restarting every hit
     if (this.busy() && (this.kind==='scream'||this.kind==='roar') && n-this.t0 < this.dur*0.55) return;
     this.lastHit=n;
@@ -1496,6 +1633,13 @@ function drawFace(c,p){
   for (const s of [-1,1]){
     const ex=s*6.4, ey=-336;
     ell(c,ex,ey+0.3,4.6,3.4,0,`rgba(90,38,28,${0.12+0.22*P+0.3*D})`);
+    if (state.blind[s]){
+      ell(c,ex,ey+0.2,4.2,3,0,'rgba(120,20,25,.55)');
+      c.beginPath(); c.moveTo(ex-3.8,ey); c.quadraticCurveTo(ex,ey+1.3,ex+3.8,ey); c.lineWidth=1; c.strokeStyle='rgba(50,8,10,.95)'; c.stroke();
+      c.beginPath(); c.moveTo(ex+s*0.5,ey+1.2); c.quadraticCurveTo(ex+s*1.2+Math.sin(t*0.6+s)*0.4,ey+7,ex+s*0.6,ey+12+F.tears*4);
+      c.lineWidth=1.1; c.strokeStyle='rgba(130,0,12,.9)'; c.stroke(); dot(c,ex+s*0.6,ey+12.4+F.tears*4,0.8,'rgba(130,0,12,.95)');
+      continue;
+    }
     if (open>0.16){
       const up=2.6*open, lo=Math.min(2.1,1.6*open+0.5);
       c.save();
@@ -1559,7 +1703,7 @@ function updateFace(dt){
   const F=state.face;
   F.pain+=((state.alive?clamp(state.pain,0,1):0)-F.pain)*Math.min(1,dt*7);
   F.scream=state.alive ? voice.mouth()*(0.9+0.1*Math.sin(state.t*38)) : 0;
-  const fearOn=state.alive && ((drag && drag.kind==='dismantle' && drag.moved) || !!arrow || (domain && domain.t<1.4) || !!grab);
+  const fearOn=state.alive && (state.throat || (drag && drag.kind==='dismantle' && drag.moved) || !!arrow || (domain && domain.t<1.4) || !!grab);
   F.fear+=((fearOn?1:0)-F.fear)*Math.min(1,dt*6);
   F.fade=clamp((65-state.blood)/40,0,1);
   if (state.alive && F.pain>0.4) F.tears=Math.min(1,F.tears+dt*0.12);
@@ -1650,6 +1794,7 @@ function render(){
   ctx.fill();
   const order=pieces.slice().sort((a,b)=>a.z-b.z||a.id-b.id);
   for (const p of order) drawPiece(p);
+  drawRopes();
   drawParticles();
   drawFx();
   if (arrow){
@@ -1690,7 +1835,7 @@ function updateGame(dt){
   if (state.alive){
     state.pain=Math.max(state.fallen?0.25:0, state.pain-dt*0.06);
     state.moanT-=dt;
-    if (state.pain>0.18 && state.moanT<=0 && !voice.busy()){ voice.ambient(); state.moanT=rnd(1.4,3.5)*(1.3-Math.min(1,state.pain)*0.6); }
+    if (state.pain>0.18 && state.moanT<=0 && !voice.busy()){ voice.ambient(); state.moanT=state.throat ? rnd(0.2,0.8) : rnd(1.4,3.5)*(1.3-Math.min(1,state.pain)*0.6); }
   }
   for (let i=queue.length-1;i>=0;i--){ queue[i].t-=dt; if (queue[i].t<=0){ const q=queue.splice(i,1)[0]; q.fn(); } }
   computeComps(); updateVitals();
@@ -1724,6 +1869,10 @@ function updateGame(dt){
   }
   updateDomain(dt);
   updateFace(dt);
+  heartbeat(dt);
+  updateRopes(dt);
+  const wantClutch=state.alive && (state.throat || state.blind['-1'] || state.blind['1'] || state.belly);
+  state.clutch+=((wantClutch?1:0)-state.clutch)*Math.min(1,dt*3);
 }
 
 /* ================= HUD ================= */
@@ -1747,7 +1896,7 @@ function updateHUD(){
 const callout=(()=>{ const el=$('callout'), k=el.querySelector('.ck'), n=el.querySelector('.cn'); let last=0;
   return { show(kanji,name,big){ k.textContent=kanji; n.textContent=name; el.classList.toggle('big',!!big); el.classList.remove('show'); void el.offsetWidth; el.classList.add('show'); last=performance.now(); },
            recent(){ return performance.now()-last<900; } }; })();
-const HINTS={dismantle:'Drag across the body. The cut follows your cursor. Tap for a small nick.',cleave:'Tap a body part to carve it into chunks.',fuga:'Tap where the flame arrow should land.',grab:'Drag any piece around. Right-drag grabs in every mode.'};
+const HINTS={dismantle:'Flick fast to cut through, drag slowly to slice. Try a slow slice across the throat.',cleave:'Tap a body part to carve it into chunks.',fuga:'Tap where the flame arrow should land.',grab:'Drag any piece around. Right-drag grabs in every mode.'};
 function setMode(m){ mode=m; document.querySelectorAll('.tech[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===m)); hud.hint.textContent=HINTS[m]; cv.style.cursor=m==='grab'?'grab':'crosshair'; }
 
 /* ================= input ================= */
@@ -1774,10 +1923,17 @@ cv.addEventListener('pointermove',e=>{
   }
   else if (drag.kind==='grab' && grab){ grab.tx=x; grab.ty=clamp(y,-600,-1); }
 });
+function dragSpeed(d){
+  const n=d.path.length-1; if (n<1) return 0; const tN=d.times[n]; let i=n; while (i>0 && tN-d.times[i-1]<90) i--; if (i===n) i=n-1;
+  let L=0; for (let k=i;k<n;k++) L+=Math.hypot(d.path[k+1][0]-d.path[k][0],d.path[k+1][1]-d.path[k][1]);
+  return L/Math.max(16,tN-d.times[i])*1000;
+}
+const speedPower=v=>settings.speed ? clamp((v-40)/260,0.12,1.25) : 1;
+function dragPower(d){ const pw=dPower()*speedPower(dragSpeed(d)); d.peak=Math.max(d.peak||0,pw); return pw; }
 function dragFrom(d){ return p=>d.from.get(p.id)||0; }
 function dragTouch(d){ return p=>d.from.set(p.id,d.path.length-1); }
 function liveCut(){
-  const d=drag, h=cutPath(d.path,{push:45,live:true,from:dragFrom(d),onTouch:dragTouch(d)});
+  const d=drag, h=cutPath(d.path,{push:45,live:true,power:dragPower(d),from:dragFrom(d),onTouch:dragTouch(d)});
   if (h){ sfx.slash(); if (!d.cut){ d.cut=true; if (!callout.recent()) callout.show('解','Dismantle'); } }
 }
 function endDrag(){
@@ -1786,9 +1942,12 @@ function endDrag(){
     const d=drag;
     if (!d.moved) quickDismantle(d.x0,d.y0);
     else if (settings.blade==='live'){
-      cutPath(d.path,{push:45,final:true,from:dragFrom(d),onTouch:dragTouch(d)});
+      cutPath(d.path,{push:45,final:true,power:d.peak||dPower()*0.3,from:dragFrom(d),onTouch:dragTouch(d)});
       fxs.push({kind:'path',pts:d.path.slice(),w:2.4,t:0,life:0.3}); markPath(d.path,false);
-    } else dismantlePath(d.path);
+    } else {
+      let L=0; for (let k=1;k<d.path.length;k++) L+=Math.hypot(d.path[k][0]-d.path[k-1][0],d.path[k][1]-d.path[k-1][1]);
+      dismantlePath(d.path, dPower()*speedPower(L/Math.max(16,d.times[d.times.length-1]-d.times[0])*1000));
+    }
   }
   if (drag.kind==='grab'){ grab=null; cv.style.cursor=mode==='grab'?'grab':'crosshair'; }
   drag=null;
@@ -1815,6 +1974,7 @@ window.addEventListener('keydown',e=>{
 function syncSettingsUI(){
   document.querySelectorAll('#segSubject button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.v===settings.subject)));
   document.querySelectorAll('#segBlade button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.v===settings.blade)));
+  document.querySelectorAll('#segSpeed button').forEach(b=>b.setAttribute('aria-pressed',String((b.dataset.v==='on')===!!settings.speed)));
   $('subjectDesc').textContent=SUBJECTS[settings.subject].desc;
   $('powRange').value=settings.power; $('powTxt').textContent=settings.power+'%';
 }
@@ -1823,6 +1983,7 @@ $('tSettings').addEventListener('click',e=>{ e.stopPropagation(); setPanel($('pa
 document.addEventListener('pointerdown',e=>{ if (!$('panel').hidden && !$('panel').contains(e.target) && e.target!==$('tSettings') && !$('tSettings').contains(e.target)) setPanel(false); });
 document.querySelectorAll('#segSubject button').forEach(b=>b.addEventListener('click',()=>{ settings.subject=b.dataset.v; subject=SUBJECTS[settings.subject]; saveSettings(); syncSettingsUI(); spawn(); }));
 document.querySelectorAll('#segBlade button').forEach(b=>b.addEventListener('click',()=>{ settings.blade=b.dataset.v; saveSettings(); syncSettingsUI(); }));
+document.querySelectorAll('#segSpeed button').forEach(b=>b.addEventListener('click',()=>{ settings.speed=b.dataset.v==='on'; saveSettings(); syncSettingsUI(); }));
 $('powRange').addEventListener('input',e=>{ settings.power=+e.target.value; $('powTxt').textContent=settings.power+'%'; saveSettings(); });
 syncSettingsUI();
 let started=false;
@@ -1842,7 +2003,7 @@ function frame(now){
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-window.__shrine={ perf, voice, hurt, get analyser(){ return analyser; }, audioInit, get pieces(){ return pieces; }, state, slash, dismantle, cleave, fuga, startDomain, spawn, setMode, get xray(){ return xray; }, set xray(v){ xray=v; } };
+window.__shrine={ w2c(x,y){ return [(OX+x*S)/DPR,(OY+y*S)/DPR]; }, perf, cutPath, addWound, toWorld, get ropes(){ return ropes; }, voice, hurt, get analyser(){ return analyser; }, audioInit, get pieces(){ return pieces; }, state, slash, dismantle, cleave, fuga, startDomain, spawn, setMode, get xray(){ return xray; }, set xray(v){ xray=v; } };
 })();
 </script>
 </body>
