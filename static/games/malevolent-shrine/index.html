@@ -869,6 +869,7 @@ function cutPiece(p, wx, wy, dx, dy, push){
     if (p.seg==='chest'||p.seg==='abdomen'||p.seg==='neck') state.face.mouthBlood=Math.min(1,state.face.mouthBlood+0.35);
   }
   state.cuts++;
+  sfx.cut(p, baseOf(p.seg)!=='abdomen');
   for (const k of kids){ bloodBurst(k, 0.5); for (let i=0;i<2;i++){ const e=k.cutEdges[(Math.random()*k.cutEdges.length)|0]; if (e){ const t=Math.random(); addStreak(k,e[0]+(e[2]-e[0])*t+e[5]*0.6,e[1]+(e[3]-e[1])*t+e[6]*0.6); } } }
   { const t=(p.x-wx)*dx+(p.y-wy)*dy, cx=wx+dx*t, cy=wy+dy*t, bone=baseOf(p.seg)!=='abdomen', nb=bone?Math.round(clamp(p.rad/6,1,5)):0;
     for (let i=0;i<nb;i++) addP({k:5,x:cx+rnd(-3,3),y:cy+rnd(-3,3),vx:p.vx+rnd(-120,120),vy:p.vy+rnd(-180,20),life:rnd(1,2),r:rnd(0.5,1.1)});
@@ -924,7 +925,7 @@ function addWound(p, worldPts, depth){
   if (len<1.2) return false;
   rest=resample(rest,1.5);
   const wd={pts:rest,len,depth,w:0.9+2*depth,bleed:1,frame:-1}; wd.path=lensPath(rest,wd.w);
-  p.wounds.push(wd);
+  p.wounds.push(wd); sfx.slice(p,depth);
   for (let i=0;i<1+(depth>0.4?1:0)+(Math.random()<0.5?1:0);i++){ const q=rest[(Math.random()*rest.length)|0]; addStreak(p,q[0],q[1]); } p.damage+=depth*0.35*Math.min(1,len/25);
   woundEffects(p,wd);
   if (state.alive && p.comp===state.heartComp) state.pendingPain+=0.05+0.28*depth*Math.min(1,len/20);
@@ -973,7 +974,7 @@ function cutPath(path, opt={}){
   });
   if (joints.length<before) hits++;
   if (hits){
-    sfx.flesh(); if (state.alive) state.flail=Math.min(1.6,state.flail+0.7);
+    if (state.alive) state.flail=Math.min(1.6,state.flail+0.7);
     state.shake=Math.min(14,state.shake+(opt.faint?1.5:4)); if (!opt.faint && !opt.live) state.hitstop=0.05;
     computeComps(); updateVitals();
   }
@@ -1015,7 +1016,7 @@ function spillGuts(p, rx, ry){
     w:colon?5.4:3.8,col:colon?COL.colon:COL.intestine,edge:colon?'#6a3a26':'#6d2e26',ph:rnd(0,TAU)};
     for (let i=0;i<3;i++) r.pts.push({x:ax+rnd(-1,1),y:ay+i*2,px:ax,py:ay+i*2}); ropes.push(r); };
   mk(false); if (Math.random()<0.6) mk(true);
-  sfx.flesh();
+  sfx.squelch(ax);
 }
 function updateRopes(dt){
   for (const r of ropes){
@@ -1069,7 +1070,7 @@ function heartbeat(dt){
         const side=Math.random()<0.5?1:-1, sp=rnd(110,340)*str;
         addP({k:0,x:wx,y:wy,vx:p.vx+(nx*side+rnd(-0.35,0.35))*sp,vy:p.vy+(ny*side-0.45+rnd(-0.3,0.3))*sp,life:rnd(0.5,1.3),r:rnd(0.7,1.9),col:BLOODS[(Math.random()*4)|0]});
       }
-      state.blood=Math.max(0,state.blood-4.2*wd.art*subject.drain);
+      state.blood=Math.max(0,state.blood-4.2*wd.art*subject.drain); sfx.spurt(wx,str);
       wd.art*=0.99;
     }
   }
@@ -1112,7 +1113,7 @@ function updateVitals(){
 }
 
 /* ---- solver ---- */
-const contacts=[];
+const contacts=[], impacts=[];
 function solvePoint(A,B,rAx,rAy,rBx,rBy,Cx,Cy,beta,dt,soft){
   const mA=A?A.im:0, iA=A?A.iI:0, mB=B.im, iB=B.iI;
   const k11=mA+mB+iA*rAy*rAy+iB*rBy*rBy, k12=-iA*rAx*rAy-iB*rBx*rBy, k22=mA+mB+iA*rAx*rAx+iB*rBx*rBx;
@@ -1128,6 +1129,7 @@ function addContact(p,wx,wy,nx,ny,pen,dt){
   const vx=p.vx-p.w*ry, vy=p.vy+p.w*rx, vn=vx*nx+vy*ny;
   let bias=Math.min(0.25/dt*Math.max(0,pen-0.3), 400);
   if (vn<-80) bias=Math.max(bias,-vn*0.12);
+  if (vn<-230 && state.t-(p.lastImp||-9)>0.3){ p.lastImp=state.t; impacts.push([wx,clamp(-vn/1000,0,1)*clamp(Math.sqrt(p.m)/6,0.25,1.2)]); }
   contacts.push({p,rx,ry,nx,ny,bias,jn:0,jt:0});
 }
 function physicsStep(dt){
@@ -1293,10 +1295,10 @@ function addSlashFx(x1,y1,x2,y2,w,kind){ fxs.push({kind:kind||'slash',x1,y1,x2,y
 /* ================= techniques ================= */
 let mode='dismantle', xray=false, slowmo=false, domain=null, domainCd=0;
 const SUBJECTS={
-  frail:{tough:0.6,drain:1.4,pain:1.3,pitch:1.08,stoic:0,desc:'Cuts go through with no resistance. Bleeds out fast and panics easily.'},
-  average:{tough:1,drain:1,pain:1,pitch:1,stoic:0,desc:'Full-power Dismantle cuts clean through any part.'},
-  athlete:{tough:1.6,drain:0.8,pain:0.8,pitch:0.92,stoic:0.4,desc:'Dense muscle. Full-power Dismantle takes off limbs but only gashes the torso and head. Grunts through small cuts.'},
-  sorcerer:{tough:3.4,drain:0.55,pain:0.55,pitch:0.86,stoic:0.8,desc:'Cursed energy reinforces the body. Dismantle mostly leaves gashes until a part is worn down. Cleave adapts and still cuts. Barely screams.'},
+  frail:{vtl:0.94,tough:0.6,drain:1.4,pain:1.3,pitch:1.08,stoic:0,desc:'Cuts go through with no resistance. Bleeds out fast and panics easily.'},
+  average:{vtl:1,tough:1,drain:1,pain:1,pitch:1,stoic:0,desc:'Full-power Dismantle cuts clean through any part.'},
+  athlete:{vtl:1.05,tough:1.6,drain:0.8,pain:0.8,pitch:0.92,stoic:0.4,desc:'Dense muscle. Full-power Dismantle takes off limbs but only gashes the torso and head. Grunts through small cuts.'},
+  sorcerer:{vtl:1.1,tough:3.4,drain:0.55,pain:0.55,pitch:0.86,stoic:0.8,desc:'Cursed energy reinforces the body. Dismantle mostly leaves gashes until a part is worn down. Cleave adapts and still cuts. Barely screams.'},
 };
 const SEG_RES={head:0.95,neck:0.9,chest:0.95,abdomen:0.8,pelvis:0.9,upperArm:0.75,forearm:0.7,hand:0.55,thigh:0.9,shin:0.8,foot:0.6};
 const settings={subject:'average',power:100,blade:'live',speed:true};
@@ -1338,7 +1340,7 @@ function fuga(tx,ty){
 }
 function explode(x,y){
   const R=78;
-  sfx.boom(); state.shake=Math.min(26,state.shake+22); fxs.push({kind:'ring',x,y,t:0,life:0.6}); fxs.push({kind:'flash',t:0,life:0.35});
+  sfx.boom(x); state.shake=Math.min(26,state.shake+22); fxs.push({kind:'ring',x,y,t:0,life:0.6}); fxs.push({kind:'flash',t:0,life:0.35});
   for (let i=0;i<140;i++){ const a=rnd(0,TAU), sp=rnd(60,520); addP({k:2,x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-80,life:rnd(0.3,0.9),r:rnd(2,6)}); }
   for (let i=0;i<40;i++){ const a=rnd(0,TAU), sp=rnd(20,140); addP({k:3,x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-60,life:rnd(1,2.2),r:rnd(5,12)}); }
   for (let i=0;i<50;i++){ const a=rnd(0,TAU), sp=rnd(150,700); addP({k:4,x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-150,life:rnd(0.6,1.6),r:rnd(0.6,1.4)}); }
@@ -1367,7 +1369,7 @@ function domainSlash(){
   if (pieces.length && Math.random()<0.8){ const p=pieces[(Math.random()*pieces.length)|0]; x=p.x+rnd(-12,12); y=p.y+rnd(-12,12); }
   else { x=rnd(-HW*0.8,HW*0.8); y=rnd(-380,-10); }
   const a=rnd(0,Math.PI), ux=Math.cos(a), uy=Math.sin(a), h=rnd(60,200);
-  addSlashFx(x-ux*h,y-uy*h,x+ux*h,y+uy*h,rnd(1.6,3.2),'domain'); sfx.slash();
+  addSlashFx(x-ux*h,y-uy*h,x+ux*h,y+uy*h,rnd(1.6,3.2),'domain'); sfx.blade(x,0.6);
   slash(x-ux*h,y-uy*h,x+ux*h,y+uy*h,{push:rnd(40,90),faint:true,power:dPower()*1.3});
 }
 function updateDomain(dt){
@@ -1390,10 +1392,10 @@ function audioInit(){
   if (ac || !AC) return;
   try{
     ac=new AC(); master=ac.createGain(); master.gain.value=muted?0:0.5;
-    const comp=ac.createDynamicsCompressor(); comp.threshold.value=-14; comp.ratio.value=6; analyser=ac.createAnalyser(); analyser.fftSize=2048;
+    const comp=ac.createDynamicsCompressor(); comp.threshold.value=-14; comp.ratio.value=8; comp.attack.value=0.002; analyser=ac.createAnalyser(); analyser.fftSize=2048;
     master.connect(comp); comp.connect(analyser); analyser.connect(ac.destination);
     const len=ac.sampleRate*1.5; noiseBuf=ac.createBuffer(1,len,ac.sampleRate); const d=noiseBuf.getChannelData(0); for (let i=0;i<len;i++) d[i]=Math.random()*2-1;
-    voice.init();
+    voice.init(); swish.init();
   }catch(e){ ac=null; }
 }
 function noise(dur,type,f0,f1,q,vol,att=0.003){
@@ -1410,13 +1412,93 @@ function tone(dur,type,f0,f1,vol,att=0.005,lp){
   let node=o; if (lp){ const f=ac.createBiquadFilter(); f.type='lowpass'; f.frequency.value=lp; o.connect(f); node=f; }
   node.connect(g); g.connect(master); o.start(t); o.stop(t+dur+0.05);
 }
+const lastSnd={};
+function throttle(key,ms){ const n=performance.now(); if (n-(lastSnd[key]||0)<ms) return false; lastSnd[key]=n; return true; }
+// Each sound gets its own stereo position from where it happens on screen.
+function outAt(x){
+  if (x!==undefined && ac.createStereoPanner){ const pn=ac.createStereoPanner(); pn.pan.value=clamp(x/(HW*0.9),-1,1)*0.75; pn.connect(master); return pn; }
+  return master;
+}
+function nb(t,dur,type,f0,f1,q,vol,dest,att=0.002){
+  const src=ac.createBufferSource(); src.buffer=noiseBuf; const f=ac.createBiquadFilter(); f.type=type; f.Q.value=q;
+  f.frequency.setValueAtTime(f0,t); if (f1!==f0) f.frequency.exponentialRampToValueAtTime(Math.max(30,f1),t+dur);
+  const g=ac.createGain(); g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(Math.max(0.0002,vol),t+att); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  src.connect(f); f.connect(g); g.connect(dest); src.start(t,Math.random()*1.2); src.stop(t+dur+0.02);
+}
+function osc(t,dur,type,f0,f1,vol,dest,att=0.002){
+  const o=ac.createOscillator(); o.type=type; o.frequency.setValueAtTime(f0,t); if (f1!==f0) o.frequency.exponentialRampToValueAtTime(Math.max(20,f1),t+dur);
+  const g=ac.createGain(); g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(Math.max(0.0002,vol),t+att); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  o.connect(g); g.connect(dest); o.start(t); o.stop(t+dur+0.02);
+}
+// Dozens of tiny filtered noise clicks: the wet crackle of tissue tearing, or the crunch of bone.
+function grains(t,span,n,fLo,fHi,vol,dest,front=2){
+  for (let i=0;i<n;i++){ const u=Math.pow(Math.random(),front), f=rnd(fLo,fHi); nb(t+u*span,rnd(0.003,0.013),'bandpass',f,f,rnd(1,4),vol*rnd(0.3,1),dest,0.0008); }
+}
+const ok=()=>ac && !muted;
 const sfx={
-  slash(){ const n=performance.now(); if (n-lastSlash<38) return; lastSlash=n; noise(0.16,'bandpass',7500,1600,1.4,0.45); tone(0.1,'sine',2900,1900,0.04); },
-  flesh(){ noise(0.2,'lowpass',1000,180,0.9,0.3); },
-  thud(){ noise(0.35,'lowpass',380,60,1,0.45); tone(0.4,'sine',80,40,0.25); },
-  fugaCharge(){ noise(0.45,'bandpass',400,2600,0.8,0.22,0.25); },
-  boom(){ noise(1.5,'lowpass',1400,50,0.7,0.9,0.005); tone(1.1,'sine',95,28,0.55); },
-  domain(){ tone(5.5,'sawtooth',55,51,0.16,0.8,320); tone(5.5,'sawtooth',55.6,51.5,0.13,0.8,320); tone(3.5,'sine',196,195,0.07,0.01); tone(3.8,'sine',293,292,0.045,0.01); noise(1.2,'bandpass',200,1800,2,0.15,0.6); },
+  // steel: an air cut plus the inharmonic ring of a blade (free-bar vibration modes)
+  blade(x,int=1){
+    if (!ok() || !throttle('blade',35)) return; const t=ac.currentTime, d=outAt(x);
+    nb(t,0.17,'bandpass',2000,7200,1.1,0.26*int,d,0.012);
+    nb(t,0.012,'highpass',4500,4500,0.7,0.3*int,d,0.0005);
+    const f=rnd(1900,2700);
+    for (const [r,v,dc] of [[1,0.13,0.55],[2.76,0.08,0.38],[5.4,0.045,0.24],[8.93,0.022,0.16]]){
+      osc(t+0.004,dc*rnd(0.8,1.2),'sine',f*r*rnd(0.997,1.003),f*r*0.997,v*int,d,0.001);
+      osc(t+0.004,dc,'sine',f*r*1.004,f*r*1.001,v*0.5*int,d,0.001);
+    }
+  },
+  slash(x){ this.blade(x); },
+  // the blade going through: meaty thump, wet squelch, tearing hiss, crackle; bone adds a crack and crunch
+  cut(p, bone){
+    if (!ok() || !throttle('cut',45)) return; const t=ac.currentTime, d=outAt(p.x), sz=clamp(Math.sqrt(p.area)/50,0.3,1.2);
+    osc(t,0.15,'sine',rnd(90,130)/sz,42,0.42*sz,d,0.003);
+    nb(t,0.24,'bandpass',rnd(950,1300),rnd(220,320),1.6,0.4*sz,d,0.004);
+    nb(t,0.09,'highpass',1900,1900,0.7,0.1,d,0.002);
+    grains(t,0.2,16,450,2600,0.32,d);
+    if (bone){
+      nb(t+0.012,0.005,'highpass',1400,1400,0.7,0.85,d,0.0003);
+      osc(t+0.012,0.055,'sine',rnd(1300,2100),rnd(900,1300),0.3,d,0.0005);
+      osc(t+0.012,0.09,'triangle',rnd(160,220),70,0.28,d,0.001);
+      grains(t+0.015,0.12,20,1800,5200,0.45,d,1.5);
+    }
+  },
+  // a slice that opens skin without severing
+  slice(p, depth){
+    if (!ok() || !throttle('slice',40)) return; const t=ac.currentTime, d=outAt(p.x);
+    nb(t,0.12+0.1*depth,'bandpass',3300,1300,2.2,0.5+0.5*depth,d,0.004);
+    grains(t,0.1,6+Math.round(depth*10),900,3500,0.55+0.4*depth,d,1.2);
+    osc(t,0.08,'sine',rnd(140,190),70,0.15+0.25*depth,d,0.003);
+    if (depth>0.5) nb(t,0.18,'bandpass',800,300,1.5,0.5*depth,d,0.006);
+  },
+  spurt(x,str){ if (!ok() || !throttle('spurt',90)) return; const t=ac.currentTime, d=outAt(x);
+    nb(t,0.34,'lowpass',1900,550,0.9,0.22*str,d,0.012); grains(t+0.02,0.3,10,280,1300,0.16*str,d,1); },
+  drip(x){ if (!ok() || !throttle('drip',65)) return; const t=ac.currentTime, d=outAt(x), f=rnd(900,1900);
+    osc(t,0.04,'sine',f,f*0.45,0.05,d,0.0005); nb(t,0.012,'bandpass',f*2,f*2,3,0.035,d,0.0005); },
+  impact(x,mag){ if (!ok() || !throttle('impact',55)) return; const t=ac.currentTime, d=outAt(x), v=clamp(mag,0.05,1);
+    osc(t,0.2,'sine',rnd(65,105),36,0.5*v,d,0.002); nb(t,0.15,'lowpass',950,190,0.8,0.32*v,d,0.002); grains(t,0.05,5,400,1600,0.14*v,d); },
+  squelch(x){ if (!ok()) return; const t=ac.currentTime, d=outAt(x);
+    for (let i=0;i<5;i++) nb(t+i*rnd(0.08,0.15),0.22,'bandpass',rnd(450,900),rnd(140,300),1.8,0.24,d,0.01);
+    grains(t,0.8,34,280,1600,0.24,d,1); },
+  flesh(){},
+  thud(x){ this.impact(x,0.9); },
+  fugaCharge(){ if (!ok()) return; const t=ac.currentTime; nb(t,0.45,'bandpass',400,2600,0.8,0.22,master,0.25); grains(t+0.1,0.35,14,1200,4000,0.1,master,0.6); },
+  boom(x){ if (!ok()) return; const t=ac.currentTime, d=outAt(x);
+    nb(t,1.6,'lowpass',1500,50,0.7,0.9,d,0.004); osc(t,1.1,'sine',95,28,0.55,d,0.003); grains(t+0.05,1.4,40,900,4200,0.18,d,1.6); },
+  domain(){ if (!ok()) return; const t=ac.currentTime;
+    const drone=(f,v)=>{ const o=ac.createOscillator(); o.type='sawtooth'; o.frequency.setValueAtTime(f,t); o.frequency.exponentialRampToValueAtTime(f*0.93,t+5.5);
+      const lp=ac.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=320; const g=ac.createGain(); g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(v,t+0.8); g.gain.exponentialRampToValueAtTime(0.0001,t+5.5);
+      o.connect(lp); lp.connect(g); g.connect(master); o.start(t); o.stop(t+5.6); };
+    drone(55,0.16); drone(55.6,0.13); osc(t,3.5,'sine',196,195,0.07,master,0.01); osc(t,3.8,'sine',293,292,0.045,master,0.01); nb(t,1.2,'bandpass',200,1800,2,0.15,master,0.6); },
+};
+// Continuous blade whoosh while dragging: louder and brighter the faster the cursor moves.
+const swish={
+  init(){ if (this.ready || !ac) return;
+    const src=ac.createBufferSource(); src.buffer=noiseBuf; src.loop=true; const f=ac.createBiquadFilter(); f.type='bandpass'; f.Q.value=1.3;
+    const g=ac.createGain(); g.gain.value=0; this.pan=ac.createStereoPanner?ac.createStereoPanner():ac.createGain();
+    src.connect(f); f.connect(g); g.connect(this.pan); this.pan.connect(master); src.start(); Object.assign(this,{f,g,ready:true}); },
+  update(speed,x){ if (!this.ready) return; const t=ac.currentTime, v=clamp((speed-60)/900,0,1);
+    this.g.gain.setTargetAtTime(v*v*0.45,t,0.03); this.f.frequency.setTargetAtTime(700+Math.min(speed,1800)*3,t,0.03);
+    if (this.pan.pan) this.pan.pan.setTargetAtTime(clamp(x/(HW*0.9),-1,1)*0.7,t,0.05); },
 };
 
 /* ---- voice: glottal-pulse + formant synthesizer (runs in an AudioWorklet, falls back to a ScriptProcessor) ---- */
@@ -1424,8 +1506,9 @@ class VoiceCore{
   constructor(sr){
     this.sr=sr; this.keys=null; this.kt=0; this.fadeG=1; this.fadeR=0; this.ctl=0; this.drive=1.4; this.gain=0.22;
     const F0=[700,1200,2600,3400,4200];
-    this.p={f0:150,amp:0,asp:0,oq:0.5,rough:0,sub:0,jit:0.01,tilt:0.3,vib:0.01,F:F0.slice()};
-    this.s={f0:150,amp:0,asp:0,oq:0.5,rough:0,sub:0,jit:0.01,tilt:0.3,vib:0.01,F:F0.slice()};
+    this.p={f0:150,amp:0,asp:0,oq:0.5,rough:0,sub:0,jit:0.01,tilt:0.3,vib:0.01,chaos:0,bip:0,tune:0,F:F0.slice()};
+    this.s={f0:150,amp:0,asp:0,oq:0.5,rough:0,sub:0,jit:0.01,tilt:0.3,vib:0.01,chaos:0,bip:0,tune:0,F:F0.slice()};
+    this.cn=0; this.ph2=0; this.pf2=220; this.prevG2=0; this.bipR=1.5;
     this.B=[80,100,150,230,300];
     this.y1=[0,0,0,0,0]; this.y2=[0,0,0,0,0]; this.ca=[0,0,0,0,0]; this.cb=[0,0,0,0,0]; this.cc=[0,0,0,0,0];
     this.ph=0; this.pf=150; this.pAmp=1; this.pN=0; this.prevG=0; this.tiltY=0; this.nPrev=0; this.dcX=0; this.dcY=0;
@@ -1439,6 +1522,7 @@ class VoiceCore{
   lerpKey(p,a,b,u){
     p.f0=a.f0+(b.f0-a.f0)*u; p.amp=a.amp+(b.amp-a.amp)*u; p.asp=a.asp+(b.asp-a.asp)*u; p.oq=a.oq+(b.oq-a.oq)*u;
     p.rough=a.rough+(b.rough-a.rough)*u; p.sub=a.sub+(b.sub-a.sub)*u; p.jit=a.jit+(b.jit-a.jit)*u; p.tilt=a.tilt+(b.tilt-a.tilt)*u; p.vib=a.vib+(b.vib-a.vib)*u;
+    p.chaos=a.chaos+(b.chaos-a.chaos)*u; p.bip=a.bip+(b.bip-a.bip)*u; p.tune=a.tune+(b.tune-a.tune)*u;
     for (let j=0;j<5;j++) p.F[j]=a.F[j]+(b.F[j]-a.F[j])*u;
   }
   interp(){
@@ -1453,7 +1537,7 @@ class VoiceCore{
   coefs(){
     const T=1/this.sr, s=this.s;
     for (let i=0;i<5;i++){
-      const F=Math.min(s.F[i],this.sr*0.45), B=this.B[i]*(1+s.asp*0.8)+(i===0?s.f0*0.12:0);
+      const Fi=i===0?Math.max(s.F[0],s.tune*Math.min(1250,s.f0*1.85)):s.F[i], F=Math.min(Fi,this.sr*0.45), B=this.B[i]*(1+s.asp*0.8)+(i===0?s.f0*0.12:0);
       const r=Math.exp(-Math.PI*B*T), C=-r*r, Bc=2*r*Math.cos(2*Math.PI*F*T);
       this.cb[i]=Bc; this.cc[i]=C; this.ca[i]=1-Bc-C;
     }
@@ -1465,7 +1549,8 @@ class VoiceCore{
         this.interp(); this.kt+=32/sr;
         const fa=0.35;
         s.f0+=(p.f0-s.f0)*0.5; s.amp+=(p.amp-s.amp)*0.5; s.asp+=(p.asp-s.asp)*fa; s.oq+=(p.oq-s.oq)*fa; s.rough+=(p.rough-s.rough)*fa;
-        s.sub+=(p.sub-s.sub)*fa; s.jit+=(p.jit-s.jit)*fa; s.tilt+=(p.tilt-s.tilt)*fa; s.vib+=(p.vib-s.vib)*fa;
+        s.sub+=(p.sub-s.sub)*fa; s.jit+=(p.jit-s.jit)*fa; s.tilt+=(p.tilt-s.tilt)*fa; s.vib+=(p.vib-s.vib)*fa; s.chaos+=(p.chaos-s.chaos)*fa; s.bip+=(p.bip-s.bip)*fa; s.tune+=(p.tune-s.tune)*fa;
+        this.bipR=Math.min(1.62,Math.max(1.38,this.bipR+(Math.random()-0.5)*0.01));
         for (let j=0;j<5;j++) s.F[j]+=(p.F[j]-s.F[j])*0.3;
         this.coefs();
         this.drift+=((Math.random()*2-1)-this.drift)*0.02;
@@ -1473,7 +1558,8 @@ class VoiceCore{
       }
       // glottal pulse train with jitter, shimmer and period-doubling (subharmonics)
       this.vph+=6.2831853*5.4/sr;
-      const f=s.f0*(1+s.vib*Math.sin(this.vph)+this.drift*s.jit*1.5);
+      this.cn+=((Math.random()*2-1)-this.cn)*0.02;
+      const f=s.f0*(1+s.vib*Math.sin(this.vph)+this.drift*s.jit*1.5+s.chaos*0.22*this.cn);
       this.ph+=this.pf/sr;
       if (this.ph>=1){
         this.ph-=1; this.pN++;
@@ -1484,6 +1570,11 @@ class VoiceCore{
       const te=Math.max(0.25,Math.min(0.9,s.oq)), tp=te*0.62, t=this.ph;
       const gl=t<tp?0.5*(1-Math.cos(Math.PI*t/tp)):t<te?Math.cos(1.5707963*(t-tp)/(te-tp)):0;
       let e=(gl-this.prevG)*this.pAmp*(sr/this.pf)*0.08; this.prevG=gl;
+      if (s.bip>0.01){ // biphonation: a second, unrelated vibration of the folds in the harshest moments
+        this.ph2+=this.pf2/sr; if (this.ph2>=1){ this.ph2-=1; this.pf2=Math.max(60,f*this.bipR*(1+s.jit*(Math.random()*2-1))); }
+        const t2=this.ph2, g2=t2<tp?0.5*(1-Math.cos(Math.PI*t2/tp)):t2<te?Math.cos(1.5707963*(t2-tp)/(te-tp)):0;
+        e+=(g2-this.prevG2)*(sr/this.pf2)*0.08*s.bip; this.prevG2=g2;
+      }
       this.tiltY+=(e-this.tiltY)*(1-s.tilt*0.92); e=this.tiltY;
       // breath noise, pulsed by the glottal flow
       const nz=Math.random()*2-1, hp=nz-this.nPrev*0.7; this.nPrev=nz;
@@ -1503,7 +1594,7 @@ class VoiceCore{
 const V5={ ah:[800,1250,2650,3400,4300], aa:[950,1400,2700,3500,4400], ae:[720,1650,2550,3400,4300], eh:[620,1750,2600,3450,4300],
   uh:[620,1150,2500,3350,4200], oh:[480,880,2500,3300,4200], ee:[320,2150,2900,3500,4400], ih:[420,1800,2550,3400,4300], ng:[300,1100,2400,3300,4200] };
 const pick=a=>a[(Math.random()*a.length)|0];
-function vkey(t,o){ return {t, f0:o.f0, amp:o.amp??0, asp:o.asp??0.05, oq:o.oq??0.5, rough:o.rough??0, sub:o.sub??0, jit:o.jit??0.012, tilt:o.tilt??0.3, vib:o.vib??0.008, F:(o.F||V5.ah).slice()}; }
+function vkey(t,o){ const k=subject.vtl||1; return {t, f0:o.f0, amp:o.amp??0, asp:o.asp??0.05, oq:o.oq??0.5, rough:o.rough??0, sub:o.sub??0, jit:o.jit??0.012, tilt:o.tilt??0.3, vib:o.vib??0.008, chaos:o.chaos??0, bip:o.bip??0, tune:o.tune??0, F:(o.F||V5.ah).map(v=>v/k)}; }
 function makeIR(sec){
   const len=Math.floor(ac.sampleRate*sec), b=ac.createBuffer(2,len,ac.sampleRate);
   for (let c=0;c<2;c++){ const d=b.getChannelData(c); for (let i=0;i<len;i++){ const t=i/len; d[i]=(Math.random()*2-1)*Math.pow(1-t,3)*(i<ac.sampleRate*0.012?0.3:1); } }
@@ -1515,8 +1606,9 @@ const voice={
     if (this.ready || this.loading || !ac) return; this.loading=true;
     const bus=ac.createGain(), pres=ac.createBiquadFilter(), dry=ac.createGain(), wet=ac.createGain(), conv=ac.createConvolver();
     pres.type='highshelf'; pres.frequency.value=2400; pres.gain.value=9;
-    bus.gain.value=2.4; dry.gain.value=1; wet.gain.value=0.2; conv.buffer=makeIR(1.5);
-    bus.connect(pres); pres.connect(dry); pres.connect(conv); conv.connect(wet); dry.connect(master); wet.connect(master);
+    bus.gain.value=2.0; dry.gain.value=1; wet.gain.value=0.2; conv.buffer=makeIR(1.5);
+    this.pan=ac.createStereoPanner?ac.createStereoPanner():ac.createGain();
+    bus.connect(pres); pres.connect(this.pan); this.pan.connect(dry); this.pan.connect(conv); conv.connect(wet); dry.connect(master); wet.connect(master);
     try{
       if (!ac.audioWorklet || !window.AudioWorkletNode) throw new Error('no worklet');
       const src=VoiceCore.toString()+"\nclass VoiceProc extends AudioWorkletProcessor{constructor(){super();this.core=new VoiceCore(sampleRate);this.port.onmessage=e=>this.core.handle(e.data);}process(i,o){this.core.process(o[0][0]);return true;}}\nregisterProcessor('voice-core',VoiceProc);";
@@ -1543,16 +1635,24 @@ const voice={
     const dur=(0.45+1.35*I)*(0.6+0.4*w)*rnd(0.85,1.15);
     const V=low?pick([V5.uh,V5.ah]):pick([V5.aa,V5.ah,V5.ae,I>0.7?V5.eh:V5.aa]), E=pick([V5.uh,V5.ah,V5.oh]);
     const rough=(low?0.6:0.35)+0.45*I, sub=(0.12+0.35*I*rnd(0.5,1))*(low?1.4:1), tilt=0.12-0.06*I;
-    const K=[vkey(0,{f0:peak*0.6,F:V,rough,sub,oq:0.4,tilt,asp:0.25}),
-      vkey(0.03,{f0:peak*0.82,amp:vol,F:V,rough:rough*1.2,sub,oq:0.38,tilt,jit:0.035,asp:0.12}),
-      vkey(0.14,{f0:peak,amp:vol,F:V,rough,sub,oq:0.36,tilt,jit:0.02,vib:0.012,asp:0.1})];
+    const tune=low?0.3:1, ch=0.15+0.35*I;
+    const K=[vkey(0,{f0:peak*0.6,F:V,rough,sub,oq:0.4,tilt,asp:0.5,tune}),
+      vkey(0.035,{f0:peak*0.62,amp:vol*0.1,F:V,rough,sub,oq:0.45,tilt,asp:0.55,tune}),
+      vkey(0.06,{f0:peak*0.85,amp:vol,F:V,rough:rough*1.2,sub,oq:0.38,tilt,jit:0.035,asp:0.12,chaos:ch*1.4,tune}),
+      vkey(0.16,{f0:peak,amp:vol,F:V,rough,sub,oq:0.36,tilt,jit:0.02,vib:0.012,asp:0.1,chaos:ch,tune})];
+    // the sustain wavers: pitch drifts, the voice catches, and the hardest moments go chaotic and double-voiced
+    for (let t=0.3;t<dur*0.7;t+=rnd(0.12,0.24)){
+      const harsh=Math.random()<0.35*I, catchV=Math.random()<0.18;
+      K.push(vkey(t,{f0:peak*rnd(0.92,1.09),amp:vol*(catchV?0.35:rnd(0.85,1)),F:Math.random()<0.25?pick([V5.aa,V5.ah,V5.eh]):V,rough:rough*(harsh?1.3:1),sub:sub*(harsh?1.6:1),
+        oq:0.36,tilt,jit:harsh?0.06:0.025,vib:0.014,asp:catchV?0.3:0.1,chaos:harsh?0.9:ch,bip:harsh&&Math.random()<0.6?0.45:0,tune}));
+    }
     if (dur>0.9 && Math.random()<0.45*I){ // voice crack: the pitch breaks upward for a moment
       const tc=0.2+Math.random()*(dur*0.7-0.4);
       K.push(vkey(tc,{f0:peak*1.03,amp:vol,F:V,rough,sub,oq:0.36,tilt,jit:0.02}), vkey(tc+0.025,{f0:peak*1.4,amp:vol*0.8,F:V,rough:rough*0.6,sub:0,oq:0.45,tilt,asp:0.2}),
              vkey(tc+0.14,{f0:peak*1.32,amp:vol*0.85,F:V,rough:rough*0.7,oq:0.42,tilt}), vkey(tc+0.17,{f0:peak,amp:vol,F:V,rough,sub,oq:0.36,tilt}));
     }
-    K.push(vkey(dur*0.72,{f0:peak*1.05,amp:vol*0.95,F:V,rough,sub,oq:0.36,tilt,jit:0.025,vib:0.015,asp:0.1}),
-      vkey(dur,{f0:peak*0.86,amp:vol*0.72,F:E,rough:rough*1.3,sub:sub*1.5,oq:0.42,tilt,asp:0.2,jit:0.04}),
+    K.push(vkey(dur*0.72,{f0:peak*1.05,amp:vol*0.95,F:V,rough,sub,oq:0.36,tilt,jit:0.025,vib:0.015,asp:0.1,chaos:ch,tune}),
+      vkey(dur,{f0:peak*0.86,amp:vol*0.72,F:E,rough:rough*1.3,sub:sub*1.5,oq:0.42,tilt,asp:0.2,jit:0.04,chaos:ch*1.5,tune:tune*0.5}),
       vkey(dur+0.25,{f0:peak*0.55,amp:0,F:E,sub:0.5,rough:0.8,asp:0.3}));
     if (I>0.45 && dur>0.8 && !low){ // ragged inhale before the next scream
       const t=dur+0.32;
@@ -1986,7 +2086,7 @@ function updateGame(dt){
       continue;
     }
     if (q.k===0){ q.vy+=G*0.8*dt; q.x+=q.vx*dt; q.y+=q.vy*dt;
-      if (q.y>=0){ floorSplat(q.x,q.r*rnd(0.9,1.6),q.col); particles.splice(i,1); continue; }
+      if (q.y>=0){ floorSplat(q.x,q.r*rnd(0.9,1.6),q.col); if (Math.random()<0.05) sfx.drip(q.x); particles.splice(i,1); continue; }
       if (q.life<=0){ if (Math.random()<0.35) wallSplat(q.x,q.y,q.r*0.8,q.col); particles.splice(i,1); continue; }
     } else {
       if (q.k===2||q.k===3){ q.vx*=Math.exp(-dt*3); q.vy*=Math.exp(-dt*3); q.vy-=(q.k===2?120:40)*dt; }
@@ -2004,6 +2104,9 @@ function updateGame(dt){
   updateDomain(dt);
   updateFace(dt);
   heartbeat(dt);
+  for (const [x,m] of impacts) sfx.impact(x,m); impacts.length=0;
+  if (drag && drag.kind==='dismantle' && drag.moved){ const l=drag.path[drag.path.length-1]; swish.update(performance.now()-drag.times[drag.times.length-1]>70?0:dragSpeed(drag),l[0]); } else swish.update(0,0);
+  if (voice.pan && voice.pan.pan && state.brainP && ac) voice.pan.pan.setTargetAtTime(clamp(state.brainP.x/(HW*0.9),-1,1)*0.6,ac.currentTime,0.1);
   updateRopes(dt);
   const wantClutch=state.alive && (state.throat || state.blind['-1'] || state.blind['1'] || state.belly);
   state.clutch+=((wantClutch?1:0)-state.clutch)*Math.min(1,dt*3);
@@ -2068,7 +2171,7 @@ function dragFrom(d){ return p=>d.from.get(p.id)||0; }
 function dragTouch(d){ return p=>d.from.set(p.id,d.path.length-1); }
 function liveCut(){
   const d=drag, h=cutPath(d.path,{push:45,live:true,power:dragPower(d),from:dragFrom(d),onTouch:dragTouch(d)});
-  if (h){ sfx.slash(); if (!d.cut){ d.cut=true; if (!callout.recent()) callout.show('解','Dismantle'); } }
+  if (h){ const l=d.path[d.path.length-1]; sfx.blade(l[0]); if (!d.cut){ d.cut=true; if (!callout.recent()) callout.show('解','Dismantle'); } }
 }
 function endDrag(){
   if (!drag) return;
