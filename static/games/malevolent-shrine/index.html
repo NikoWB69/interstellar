@@ -38,6 +38,10 @@ button:focus-visible{outline:2px solid var(--ember);outline-offset:2px}
 .reason{font-size:12px;color:var(--ash)}
 .bar{width:200px;max-width:52vw;height:6px;background:rgba(234,223,207,.1);position:relative;overflow:hidden}
 .bar i{position:absolute;inset:0;transform-origin:left;background:linear-gradient(90deg,var(--blood-deep),var(--blood));transition:transform .2s}
+.ce-row{display:flex;align-items:center;gap:8px;font-size:11px;color:#8fc6ff;letter-spacing:.06em}
+.ce-row[hidden]{display:none}
+.bar.ce{width:140px;height:4px}
+.bar.ce i{background:linear-gradient(90deg,#1c3f73,#79c8ff)}
 .stats{display:flex;gap:14px;font-family:var(--f-mono);font-size:11px;color:var(--ash);font-variant-numeric:tabular-nums}
 .stats b{color:var(--bone);font-weight:500}
 
@@ -128,6 +132,7 @@ input[type=range]{width:100%;accent-color:var(--blood)}
     <div class="brand"><span class="brand-k">伏魔御厨子</span><span class="brand-l">Malevolent Shrine</span></div>
     <div class="status-row"><span class="status" id="status">Alive</span><span class="reason" id="reason">Subject is standing</span></div>
     <div class="bar" title="Blood volume"><i id="bloodBar"></i></div>
+    <div class="ce-row" id="ceRow" hidden><span>Cursed energy</span><div class="bar ce" title="Cursed energy"><i id="ceBar"></i></div></div>
     <div class="stats"><span>Blood <b id="bloodTxt">100%</b></span><span>Pain <b id="painTxt">0%</b></span><span>Cuts <b id="cutsTxt">0</b></span><span>Pieces <b id="piecesTxt">0</b></span></div>
   </div>
   <div class="toggles">
@@ -159,6 +164,13 @@ input[type=range]{width:100%;accent-color:var(--blood)}
     <label class="plabel" for="powRange">Dismantle power <b id="powTxt">100%</b></label>
     <input type="range" id="powRange" min="10" max="150" step="5" value="100">
     <p class="pdesc">Below what a body part can take, a slash leaves a gash instead of cutting through. Repeated gashes weaken the part. Cleave always cuts through.</p>
+  </div>
+  <div class="prow">
+    <span class="plabel">Reverse cursed technique</span>
+    <div class="seg" id="segRct" role="group" aria-label="Reverse cursed technique">
+      <button data-v="on">Sorcerers heal</button><button data-v="off">Off</button>
+    </div>
+    <p class="pdesc">A sorcerer stops bleeding, closes wounds and regrows lost parts while they have cursed energy. Destroying the brain, beheading or splitting the torso still kills.</p>
   </div>
   <div class="prow">
     <span class="plabel">Cut depth</span>
@@ -746,7 +758,7 @@ function buildTextures(){
 let pieces=[], joints=[], nextId=1, grab=null;
 const state = { alive:true, fallen:false, blood:100, cuts:0, reason:'Subject is standing', flail:0, t:0, standX:0, pelvisY:0,
   pain:0, pendingPain:0, moanT:2, face:{pain:0,scream:0,fear:0,fade:0,tears:0,mouthBlood:0},
-  throat:false, blind:{'-1':false,'1':false}, lung:false, belly:false, clutch:0, beatT:0, beatNo:0,
+  throat:false, blind:{'-1':false,'1':false}, lung:false, belly:false, clutch:0, beatT:0, beatNo:0, ce:100, regenT:0, rise:1, lastHit:-9, rctGlow:0,
   heartComp:-1, hitstop:0, shake:0, knock:0 };
 
 function buildPaths(p){
@@ -791,7 +803,7 @@ function spawn(){
     side: sideOf(j[1]), kind: baseOf(j[1]) });
   Object.assign(state, { alive:true, fallen:false, blood:100, cuts:0, reason:'Subject is standing', flail:0, hitstop:0, shake:0, knock:0, standX:0,
     pain:0, pendingPain:0, moanT:2, face:{pain:0,scream:0,fear:0,fade:0,tears:0,mouthBlood:0},
-    throat:false, blind:{'-1':false,'1':false}, lung:false, belly:false, clutch:0, beatT:0 });
+    throat:false, blind:{'-1':false,'1':false}, lung:false, belly:false, clutch:0, beatT:0, ce:100, regenT:0, rise:1, lastHit:-9, rctGlow:0 });
   voice.stop(true); ropes.length=0;
   state.pelvisY = map.pelvis.y;
   particles.length=0; fxs.length=0; queue.length=0; arrow=null;
@@ -862,7 +874,8 @@ function cutPiece(p, wx, wy, dx, dy, push){
   if (state.alive){
     const lineDist=(pt)=>Math.abs(Dx*(pt[1]-Py)-Dy*(pt[0]-Px));
     if (p.seg==='head' && pointInPoly(BRAIN[0],BRAIN[1],p.v) && lineDist(BRAIN)<12) die('Brain split in two');
-    else if (p.seg==='chest' && pointInPoly(HEART[0],HEART[1],p.v) && lineDist(HEART)<10) die('Heart cleaved');
+    else if (p.seg==='chest' && pointInPoly(HEART[0],HEART[1],p.v) && lineDist(HEART)<10){
+      if (rctOn() && state.ce>=30){ state.ce-=30; state.pendingPain+=0.8; toast('Heart cleaved, regenerating'); } else die('Heart cleaved'); }
   }
   if (state.alive && p.comp===state.heartComp){
     state.pendingPain+=clamp(0.14+p.area/2500,0.14,0.55);
@@ -1019,9 +1032,11 @@ function spillGuts(p, rx, ry){
   sfx.squelch(ax);
 }
 function updateRopes(dt){
+  for (let i=ropes.length-1;i>=0;i--) if (ropes[i].dead) ropes.splice(i,1);
   for (const r of ropes){
     if (r.p && r.p.gone) r.p=pieces.find(q=>q.seg==='abdomen' && pointInPoly(r.rx,r.ry,q.v)) || null;
     let ax=0, ay=0; if (r.p) [ax,ay]=toWorld(r.p,r.rx,r.ry);
+    if (r.retract && r.p){ r.target=0; r.grow+=dt; while (r.grow>0.03 && r.pts.length>2){ r.grow-=0.03; r.pts.splice(1,1); } if (r.pts.length<=2) r.dead=true; }
     if (r.p && r.pts.length<r.target){ r.grow+=dt; while (r.grow>0.045 && r.pts.length<r.target){ r.grow-=0.045; r.pts.splice(1,0,{x:ax+rnd(-0.5,0.5),y:ay+0.5,px:ax,py:ay}); } }
     const g=G*0.8*dt*dt;
     for (let i=r.p?1:0;i<r.pts.length;i++){
@@ -1076,6 +1091,89 @@ function heartbeat(dt){
   }
 }
 
+/* ---- reverse cursed technique: positive energy heals the sorcerer ---- */
+const SEG_AREA={}; for (const n in SEG) SEG_AREA[n]=polyProps(SEG[n].poly).area;
+const PARENT={}; for (const j of JOINTS) PARENT[j[1]]={parent:j[0],x:j[2],y:j[3]};
+const REGEN_ORDER=['chest','neck','abdomen','pelvis','upperArmL','upperArmR','forearmL','forearmR','handL','handR','thighL','thighR','shinL','shinR','footL','footR'];
+const rctOn=()=>subject.rct && settings.rct;
+// Next body part to rebuild: a stump attached to the body, or a missing part whose parent is whole.
+function findRegen(){
+  const hc=state.heartComp, body=pieces.filter(p=>p.comp===hc);
+  for (const seg of REGEN_ORDER){
+    const own=body.filter(p=>p.seg===seg), area=own.reduce((a,p)=>a+p.area,0);
+    if (own.length && area>SEG_AREA[seg]*0.985) continue;
+    if (own.length) return {seg,own,frame:own.reduce((a,b)=>a.area>b.area?a:b),origin:null};
+    const pj=PARENT[seg]; if (!pj) continue;
+    const par=body.find(p=>p.seg===pj.parent && pointInPoly(pj.x,pj.y,p.v));
+    const parWhole=par && body.filter(p=>p.seg===pj.parent).reduce((a,p)=>a+p.area,0)>SEG_AREA[pj.parent]*0.985;
+    if (par && parWhole) return {seg,own,frame:par,origin:[pj.x,pj.y]};
+  }
+  return null;
+}
+function regrowOne(){
+  const r=findRegen(); if (!r) return null;
+  const hc=state.heartComp, {seg,own,frame}=r;
+  const poly=SEG[seg].poly.map(q=>[q[0],q[1]]), np=makePiece(seg,poly,poly.map(()=>false));
+  const [x,y]=toWorld(frame,np.cx,np.cy);
+  Object.assign(np,{x,y,a:frame.a,vx:frame.vx,vy:frame.vy,w:frame.w,comp:hc,streaks:[],regen:0.001,
+    origin:r.origin||[frame.cx,frame.cy]});
+  let R=0; for (const [vx,vy] of np.v) R=Math.max(R,Math.hypot(vx-np.origin[0],vy-np.origin[1])); np.regenR=R+1;
+  for (const o of own){ const i=pieces.indexOf(o); if (i>=0) pieces.splice(i,1); o.gone=true; for (const j of joints){ if (j.a===o) j.a=np; if (j.b===o) j.b=np; } }
+  joints=joints.filter((j,i,arr)=>j.a!==j.b && arr.findIndex(k=>k.a===j.a&&k.b===j.b&&k.jx===j.jx)===i);
+  pieces.push(np);
+  for (const J of JOINTS){
+    if (J[0]!==seg && J[1]!==seg) continue;
+    const other=J[0]===seg?J[1]:J[0];
+    if (joints.some(j=>(j.a===np||j.b===np) && (j.a.seg===other||j.b.seg===other))) continue;
+    const op=pieces.find(p=>p.comp===hc && p!==np && p.seg===other && pointInPoly(J[2],J[3],p.v)); if (!op) continue;
+    const A=J[0]===seg?np:op, B=J[0]===seg?op:np;
+    joints.push({a:A,b:B,jx:J[2],jy:J[3],lo:J[4],hi:J[5],flail:J[6],phase:Math.random()*TAU,side:sideOf(J[1]),kind:baseOf(J[1])});
+  }
+  if (grab && own.includes(grab.p)) grab=null;
+  computeComps(); updateVitals();
+  return np;
+}
+function sparkle(x,y,n){ for (let i=0;i<n;i++) addP({k:7,x:x+rnd(-3,3),y:y+rnd(-3,3),vx:rnd(-12,12),vy:rnd(-40,-10),life:rnd(0.5,1.1),r:rnd(0.6,1.6)}); }
+function updateRCT(dt){
+  if (!rctOn() || !state.alive) return;
+  state.ce=Math.min(100,state.ce+dt*5);
+  state.rise=Math.min(1,state.rise+dt*0.7);
+  state.rctGlow=Math.max(0,state.rctGlow-dt*1.5);
+  if (state.t-state.lastHit<0.7 || state.ce<=0) return;
+  const hc=state.heartComp; let active=false;
+  for (const p of pieces){
+    if (p.comp!==hc) continue;
+    if (p.hasCut && p.bleed>0.01){ p.bleed*=Math.exp(-dt*3); active=true; }
+    if (!p.wounds.length) continue;
+    for (const wd of p.wounds){
+      if (wd.frame2===frameNo) continue; wd.frame2=frameNo;
+      wd.bleed=0; wd.art=0; wd.heal=(wd.heal||0)+dt*0.8; state.ce-=dt*1.2; active=true;
+      const w=wd.w*Math.max(0.02,1-wd.heal); if (Math.abs(w-(wd.pw||wd.w))>0.08){ wd.pw=w; wd.path=lensPath(wd.pts,w); wd.core=null; }
+      if (Math.random()<dt*6){ const q=wd.pts[(Math.random()*wd.pts.length)|0]; const [wx,wy]=toWorld(p,q[0],q[1]); sparkle(wx,wy,2); }
+    }
+    p.wounds=p.wounds.filter(w=>(w.heal||0)<1);
+  }
+  if (state.blood<100){ state.blood=Math.min(100,state.blood+dt*7); state.ce-=dt*1.4; active=true; }
+  state.regenT-=dt;
+  if (state.regenT<=0){
+    state.regenT=0.3;
+    if (state.ce>=8){ const np=regrowOne(); if (np){ state.ce-=8; state.regenT=0.5; active=true; sfx.rct(np.x); if (throttle('rctCall',4000)) callout.show('反転術式','Reverse Cursed Technique',true); } }
+  }
+  for (const r of ropes) if (r.p && r.p.comp===hc) r.retract=true;
+  const bodyHas=(seg,fn)=>pieces.some(p=>p.comp===hc && p.seg===seg && p.wounds.some(fn));
+  if (state.throat && !bodyHas('neck',()=>true)) { state.throat=false; toast('Throat healed'); }
+  for (const sd of [-1,1]) if (state.blind[sd] && !bodyHas('head',w=>woundNear(w,sd*6.4,-336,3.6))) state.blind[sd]=false;
+  if (state.lung && !bodyHas('chest',()=>true)) state.lung=false;
+  if (state.belly && !bodyHas('abdomen',()=>true) && !ropes.some(r=>r.p && r.p.comp===hc)) state.belly=false;
+  if (active){
+    state.rctGlow=1; state.pain=Math.max(0,state.pain-dt*0.35);
+    const F=state.face; F.mouthBlood=Math.max(0,F.mouthBlood-dt*0.25); F.tears=Math.max(0,F.tears-dt*0.12);
+  }
+  if (state.fallen && state.knock<=0 && state.blood>60 && state.ce>15 && !findRegen()){
+    state.fallen=false; state.rise=0; state.flail=0; state.reason='Subject is standing'; const feet=pieces.filter(p=>p.comp===state.heartComp && (p.seg==='footL'||p.seg==='footR')); state.standX=feet.length?feet.reduce((a,p)=>a+p.x,0)/feet.length:(state.pelvisP?state.pelvisP.x:0); toast('Regenerated');
+  }
+}
+
 /* ---- connectivity & vitals ---- */
 function computeComps(){
   const n=pieces.length, par=new Int32Array(n); for (let i=0;i<n;i++){ par[i]=i; pieces[i]._i=i; }
@@ -1091,11 +1189,13 @@ function die(reason){
 function hurt(a){
   if (!state.alive) return;
   a*=subject.pain;
-  state.pain=Math.min(1.4,state.pain+a); state.moanT=Math.max(state.moanT,1.2);
+  state.pain=Math.min(1.4,state.pain+a); state.moanT=Math.max(state.moanT,1.2); state.lastHit=state.t;
   voice.hurtScream(clamp(a*1.3+state.pain*0.35,0.12,1));
 }
 function updateVitals(){
-  const brain=pieceAt('head',BRAIN), heart=pieceAt('chest',HEART), pelvis=pieceAt('pelvis',PELVIS_PT);
+  const heart=pieceAt('chest',HEART);
+  const pref=(seg,pt)=>(heart && pieces.find(p=>p.seg===seg && p.comp===heart.comp && pointInPoly(pt[0],pt[1],p.v))) || pieceAt(seg,pt);
+  const brain=pref('head',BRAIN), pelvis=pref('pelvis',PELVIS_PT);
   state.brainP=brain; state.heartP=heart; state.pelvisP=pelvis;
   state.heartComp = heart ? heart.comp : -1;
   if (state.alive){
@@ -1213,11 +1313,11 @@ function control(dt){
       const L=(k*(target-rel)-d*relW)*dt*em; A.w-=A.iI*L; B.w+=B.iI*L;
     }
     if (standing && st.pelvisP){
-      for (const p of pieces) if (p.comp===st.heartComp) p.vy-=G*dt;
+      const rs=st.rise; for (const p of pieces) if (p.comp===st.heartComp) p.vy-=G*dt*rs;
       const pv=st.pelvisP;
-      pv.vy+=(160*(st.pelvisY-pv.y)-22*pv.vy)*dt;
+      pv.vy+=(160*(st.pelvisY-pv.y)-22*pv.vy)*dt*rs;
       pv.vx+=(25*(st.standX-pv.x)-10*pv.vx)*dt;
-      for (const p of [pv, st.heartP, st.brainP]){ if (!p) continue; p.w+=(380*(0-wrapA(p.a))-34*p.w)*dt; }
+      for (const p of [pv, st.heartP, st.brainP]){ if (!p) continue; p.w+=(380*(0-wrapA(p.a))-34*p.w)*dt*rs; }
     }
   } else {
     for (const j of joints){ const A=j.a, B=j.b, relW=B.w-A.w, em=1/(A.iI+B.iI); const L=-3*relW*dt*em; A.w-=A.iI*L; B.w+=B.iI*L; }
@@ -1298,10 +1398,10 @@ const SUBJECTS={
   frail:{vtl:0.94,tough:0.6,drain:1.4,pain:1.3,pitch:1.08,stoic:0,desc:'Cuts go through with no resistance. Bleeds out fast and panics easily.'},
   average:{vtl:1,tough:1,drain:1,pain:1,pitch:1,stoic:0,desc:'Full-power Dismantle cuts clean through any part.'},
   athlete:{vtl:1.05,tough:1.6,drain:0.8,pain:0.8,pitch:0.92,stoic:0.4,desc:'Dense muscle. Full-power Dismantle takes off limbs but only gashes the torso and head. Grunts through small cuts.'},
-  sorcerer:{vtl:1.1,tough:3.4,drain:0.55,pain:0.55,pitch:0.86,stoic:0.8,desc:'Cursed energy reinforces the body. Dismantle mostly leaves gashes until a part is worn down. Cleave adapts and still cuts. Barely screams.'},
+  sorcerer:{rct:true,vtl:1.1,tough:3.4,drain:0.55,pain:0.55,pitch:0.86,stoic:0.8,desc:'Cursed energy reinforces the body. Dismantle mostly leaves gashes until a part is worn down. Cleave adapts and still cuts. Barely screams, and heals with reverse cursed technique.'},
 };
 const SEG_RES={head:0.95,neck:0.9,chest:0.95,abdomen:0.8,pelvis:0.9,upperArm:0.75,forearm:0.7,hand:0.55,thigh:0.9,shin:0.8,foot:0.6};
-const settings={subject:'average',power:100,blade:'live',speed:true};
+const settings={subject:'average',power:100,blade:'live',speed:true,rct:true};
 try{ Object.assign(settings, JSON.parse(localStorage.getItem('shrine-settings')||'{}')); }catch(e){}
 if (!SUBJECTS[settings.subject]) settings.subject='average';
 let subject=SUBJECTS[settings.subject];
@@ -1480,6 +1580,9 @@ const sfx={
     for (let i=0;i<5;i++) nb(t+i*rnd(0.08,0.15),0.22,'bandpass',rnd(450,900),rnd(140,300),1.8,0.24,d,0.01);
     grains(t,0.8,34,280,1600,0.24,d,1); },
   flesh(){},
+  rct(x){ if (!ok() || !throttle('rct',300)) return; const t=ac.currentTime, d=outAt(x);
+    for (const [f,v] of [[523,0.05],[784,0.04],[1047,0.03],[1568,0.02]]) osc(t,1.3,'sine',f*rnd(0.995,1.005),f,v,d,0.18);
+    grains(t,0.9,16,4500,9000,0.05,d,1); },
   thud(x){ this.impact(x,0.9); },
   fugaCharge(){ if (!ok()) return; const t=ac.currentTime; nb(t,0.45,'bandpass',400,2600,0.8,0.22,master,0.25); grains(t+0.1,0.35,14,1200,4000,0.1,master,0.6); },
   boom(x){ if (!ok()) return; const t=ac.currentTime, d=outAt(x);
@@ -1933,6 +2036,7 @@ function drawPiece(p){
   const T=TEX[p.seg];
   ctx.save(); ctx.translate(OX+p.x*S, OY+p.y*S); ctx.rotate(p.a); ctx.scale(S,S); ctx.translate(-p.cx,-p.cy);
   ctx.save(); ctx.clip(p.body);
+  if (p.regen!==undefined){ ctx.beginPath(); ctx.arc(p.origin[0],p.origin[1],p.regenR*p.regen,0,TAU); ctx.clip(); }
   const skin=T.skin;
   if (xray){
     ctx.drawImage(T.inner.cnv,T.inner.x0,T.inner.y0,T.inner.w,T.inner.h);
@@ -1956,7 +2060,11 @@ function drawPiece(p){
   if (p.char>0.01){ ctx.fillStyle=`rgba(24,10,5,${p.char*0.82})`; ctx.fill(p.body); }
   ctx.restore();
   ctx.lineJoin='round'; ctx.lineCap='round';
-  ctx.strokeStyle='rgba(28,8,6,.5)'; ctx.lineWidth=0.7; ctx.stroke(p.outline);
+  if (p.regen!==undefined){
+    ctx.save(); ctx.clip(p.body); ctx.beginPath(); ctx.arc(p.origin[0],p.origin[1],p.regenR*p.regen,0,TAU);
+    ctx.strokeStyle='rgba(170,225,255,.9)'; ctx.lineWidth=2.2; ctx.stroke(); ctx.strokeStyle='rgba(255,255,255,.95)'; ctx.lineWidth=0.7; ctx.stroke(); ctx.restore();
+  } else { ctx.strokeStyle='rgba(28,8,6,.5)'; ctx.lineWidth=0.7; ctx.stroke(p.outline); }
+  if (state.rctGlow>0.05 && state.alive && p.comp===state.heartComp){ ctx.strokeStyle=`rgba(150,215,255,${0.35*state.rctGlow})`; ctx.lineWidth=1.6; ctx.stroke(p.body); }
   if (p.hasCut){
     ctx.strokeStyle='#36000a'; ctx.lineWidth=1.3; ctx.stroke(p.rim);
     ctx.strokeStyle='rgba(255,90,90,.35)'; ctx.lineWidth=0.4; ctx.stroke(p.rim);
@@ -2002,6 +2110,7 @@ function drawParticles(){
   for (const q of particles){
     if (q.k===2){ const a=q.life/q.max; ctx.fillStyle=`rgba(255,${(90+120*a)|0},${(30*a)|0},${a*0.8})`; ctx.beginPath(); ctx.arc(OX+q.x*S,OY+q.y*S,q.r*S*(0.5+a),0,TAU); ctx.fill(); }
     else if (q.k===4){ ctx.fillStyle=`rgba(255,180,90,${q.life/q.max})`; ctx.fillRect(OX+q.x*S,OY+q.y*S,q.r*S,q.r*S); }
+    else if (q.k===7){ const a=q.life/q.max; ctx.fillStyle=`rgba(160,220,255,${a*0.85})`; ctx.beginPath(); ctx.arc(OX+q.x*S,OY+q.y*S,q.r*S*(0.4+a*0.6),0,TAU); ctx.fill(); }
   }
   ctx.globalCompositeOperation='source-over';
   for (const q of particles){ if (q.k!==3) continue; const a=q.life/q.max; ctx.fillStyle=`rgba(30,22,22,${a*0.35})`; ctx.beginPath(); ctx.arc(OX+q.x*S,OY+q.y*S,q.r*S*(1.6-a),0,TAU); ctx.fill(); }
@@ -2089,7 +2198,8 @@ function updateGame(dt){
       if (q.y>=0){ floorSplat(q.x,q.r*rnd(0.9,1.6),q.col); if (Math.random()<0.05) sfx.drip(q.x); particles.splice(i,1); continue; }
       if (q.life<=0){ if (Math.random()<0.35) wallSplat(q.x,q.y,q.r*0.8,q.col); particles.splice(i,1); continue; }
     } else {
-      if (q.k===2||q.k===3){ q.vx*=Math.exp(-dt*3); q.vy*=Math.exp(-dt*3); q.vy-=(q.k===2?120:40)*dt; }
+      if (q.k===7){ q.vx*=Math.exp(-dt*2); q.vy*=Math.exp(-dt*2); }
+      else if (q.k===2||q.k===3){ q.vx*=Math.exp(-dt*3); q.vy*=Math.exp(-dt*3); q.vy-=(q.k===2?120:40)*dt; }
       else { q.vy+=G*0.6*dt; if (q.y>0){ q.y=0; q.vy*=-0.3; q.vx*=0.6; } }
       q.x+=q.vx*dt; q.y+=q.vy*dt;
       if (q.life<=0){ particles.splice(i,1); }
@@ -2108,6 +2218,8 @@ function updateGame(dt){
   if (drag && drag.kind==='dismantle' && drag.moved){ const l=drag.path[drag.path.length-1]; swish.update(performance.now()-drag.times[drag.times.length-1]>70?0:dragSpeed(drag),l[0]); } else swish.update(0,0);
   if (voice.pan && voice.pan.pan && state.brainP && ac) voice.pan.pan.setTargetAtTime(clamp(state.brainP.x/(HW*0.9),-1,1)*0.6,ac.currentTime,0.1);
   updateRopes(dt);
+  updateRCT(dt);
+  for (const p of pieces) if (p.regen!==undefined){ p.regen+=dt/0.55; if (Math.random()<dt*25){ const a=rnd(0,TAU), rr=p.regenR*Math.min(1,p.regen); const [wx,wy]=toWorld(p,p.origin[0]+Math.cos(a)*rr,p.origin[1]+Math.sin(a)*rr); if (pointInPoly(...toRest(p,wx,wy),p.v)) sparkle(wx,wy,1); } if (p.regen>=1) delete p.regen; }
   const wantClutch=state.alive && (state.throat || state.blind['-1'] || state.blind['1'] || state.belly);
   state.clutch+=((wantClutch?1:0)-state.clutch)*Math.min(1,dt*3);
 }
@@ -2124,6 +2236,7 @@ function updateHUD(){
   if (state.alive){ const pn=state.pain;
     re = state.blood<55 ? 'Going into shock' : state.face.scream>0.5 ? 'Screaming' : pn>0.75 ? 'In agony' : pn>0.4 ? 'Badly hurt' : pn>0.12 ? 'Hurt' : state.fallen ? 'Down, still breathing' : 'Subject is standing'; }
   setText(hud.reason,'re',re);
+  const showCe=rctOn(); $('ceRow').hidden=!showCe; if (showCe) $('ceBar').style.transform=`scaleX(${clamp(state.ce,0,100)/100})`;
   setText(hud.pain,'pn',(state.alive?Math.round(clamp(state.pain,0,1)*100):0)+'%');
   const b=Math.round(state.blood); setText(hud.blood,'bl',b+'%'); hud.bar.style.transform=`scaleX(${state.blood/100})`;
   setText(hud.cuts,'cu',String(state.cuts)); setText(hud.pieces,'pi',String(pieces.length));
@@ -2212,6 +2325,7 @@ function syncSettingsUI(){
   document.querySelectorAll('#segSubject button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.v===settings.subject)));
   document.querySelectorAll('#segBlade button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.v===settings.blade)));
   document.querySelectorAll('#segSpeed button').forEach(b=>b.setAttribute('aria-pressed',String((b.dataset.v==='on')===!!settings.speed)));
+  document.querySelectorAll('#segRct button').forEach(b=>b.setAttribute('aria-pressed',String((b.dataset.v==='on')===!!settings.rct)));
   $('subjectDesc').textContent=SUBJECTS[settings.subject].desc;
   $('powRange').value=settings.power; $('powTxt').textContent=settings.power+'%';
 }
@@ -2221,6 +2335,7 @@ document.addEventListener('pointerdown',e=>{ if (!$('panel').hidden && !$('panel
 document.querySelectorAll('#segSubject button').forEach(b=>b.addEventListener('click',()=>{ settings.subject=b.dataset.v; subject=SUBJECTS[settings.subject]; saveSettings(); syncSettingsUI(); spawn(); }));
 document.querySelectorAll('#segBlade button').forEach(b=>b.addEventListener('click',()=>{ settings.blade=b.dataset.v; saveSettings(); syncSettingsUI(); }));
 document.querySelectorAll('#segSpeed button').forEach(b=>b.addEventListener('click',()=>{ settings.speed=b.dataset.v==='on'; saveSettings(); syncSettingsUI(); }));
+document.querySelectorAll('#segRct button').forEach(b=>b.addEventListener('click',()=>{ settings.rct=b.dataset.v==='on'; saveSettings(); syncSettingsUI(); }));
 $('powRange').addEventListener('input',e=>{ settings.power=+e.target.value; $('powTxt').textContent=settings.power+'%'; saveSettings(); });
 syncSettingsUI();
 let started=false;
