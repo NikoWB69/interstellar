@@ -72,6 +72,13 @@ document.addEventListener('DOMContentLoaded', () => {
       categories: ['all', '2P'],
     },
     {
+      name: "Malevolent Shrine",
+      link: "/games/malevolent-shrine/index.html",
+      image: "/games/malevolent-shrine/icon.svg",
+      categories: ['all', 'local'],
+      local: "true"
+    },
+    {
       name: "Stickman Hook",
       link: "/edu/stickman-hook/index.html",
       image: "/assets/media/icons/stickmanhook.jpg",

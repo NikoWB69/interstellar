@@ -1,0 +1,1351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Malevolent Shrine</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho+B1:wght@600;800&family=Zen+Kaku+Gothic+New:wght@400;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+:root{
+  /* Layout: full-bleed stage canvas; vitals float top-left, toggles top-right, technique bar along the bottom */
+  --ink:#0b0708;
+  --ink-2:#1a1112;
+  --bone:#eadfcf;
+  --ash:#8f817a;
+  --blood:#c3151f;
+  --blood-deep:#560711;
+  --ember:#ff8a3d;
+  --f-kanji:"Shippori Mincho B1","Hiragino Mincho ProN","Yu Mincho","Noto Serif CJK JP",serif;
+  --f-body:"Zen Kaku Gothic New",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+html,body{height:100%;margin:0;background:var(--ink);color:var(--bone);overflow:hidden;font-family:var(--f-body);-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+#stage{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:crosshair}
+button{font:inherit;color:inherit}
+button:focus-visible{outline:2px solid var(--ember);outline-offset:2px}
+
+.hud-top{position:fixed;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
+  padding:calc(env(safe-area-inset-top,0px) + 12px) max(16px,env(safe-area-inset-right,0px)) 0 max(16px,env(safe-area-inset-left,0px));pointer-events:none}
+.vitals{display:grid;gap:6px;pointer-events:auto;min-width:0}
+.brand{display:flex;align-items:baseline;gap:10px}
+.brand-k{font-family:var(--f-kanji);font-weight:800;font-size:22px;letter-spacing:.06em;color:var(--blood);text-shadow:0 0 18px rgba(195,21,31,.45)}
+.brand-l{font-size:11px;letter-spacing:.28em;text-transform:uppercase;color:var(--ash)}
+.status-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.status{font-family:var(--f-mono);font-size:12px;letter-spacing:.14em;padding:3px 8px;border:1px solid currentColor;color:#9fe0a8;text-transform:uppercase}
+.status.dead{color:var(--blood)}
+.status.down{color:var(--ember)}
+.reason{font-size:12px;color:var(--ash)}
+.bar{width:200px;max-width:52vw;height:6px;background:rgba(234,223,207,.1);position:relative;overflow:hidden}
+.bar i{position:absolute;inset:0;transform-origin:left;background:linear-gradient(90deg,var(--blood-deep),var(--blood));transition:transform .2s}
+.stats{display:flex;gap:14px;font-family:var(--f-mono);font-size:11px;color:var(--ash);font-variant-numeric:tabular-nums}
+.stats b{color:var(--bone);font-weight:500}
+
+.toggles{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;pointer-events:auto}
+.tog{background:rgba(20,12,13,.72);border:1px solid rgba(234,223,207,.16);padding:6px 10px;font-size:12px;cursor:pointer;display:flex;gap:6px;align-items:center;letter-spacing:.04em}
+.tog kbd{font-family:var(--f-mono);font-size:10px;color:var(--ash)}
+.tog[aria-pressed="true"]{border-color:var(--blood);color:#fff;background:rgba(86,7,17,.7)}
+.tog:hover{border-color:rgba(234,223,207,.4)}
+
+.techniques{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;gap:8px;flex-wrap:wrap;
+  padding:10px max(16px,env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 12px) max(16px,env(safe-area-inset-left,0px));
+  background:linear-gradient(to top,rgba(8,5,6,.92),rgba(8,5,6,0));pointer-events:none}
+.tech{pointer-events:auto;position:relative;display:grid;grid-template-columns:auto auto;align-items:center;column-gap:10px;
+  background:rgba(22,13,14,.85);border:1px solid rgba(234,223,207,.14);padding:8px 14px 8px 10px;cursor:pointer;min-width:0;overflow:hidden}
+.tech .k{font-family:var(--f-kanji);font-weight:800;font-size:28px;line-height:1;grid-row:span 2;color:var(--bone)}
+.tech .n{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;text-align:left}
+.tech .d{font-size:11px;color:var(--ash);text-align:left;white-space:nowrap}
+.tech kbd{position:absolute;top:4px;right:6px;font-family:var(--f-mono);font-size:9px;color:var(--ash)}
+.tech:hover{border-color:rgba(234,223,207,.35)}
+.tech.active{border-color:var(--blood);background:linear-gradient(180deg,rgba(120,10,22,.55),rgba(30,8,10,.9))}
+.tech.active .k{color:#fff;text-shadow:0 0 14px rgba(255,40,50,.7)}
+.tech.domain .k{color:var(--blood)}
+.tech .cd{position:absolute;inset:0;background:rgba(5,2,3,.72);transform-origin:left;transform:scaleX(0);pointer-events:none}
+.tech[disabled]{cursor:not-allowed}
+
+.hint{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 96px);font-size:12px;color:var(--ash);
+  letter-spacing:.04em;pointer-events:none;text-align:center;width:min(92vw,560px);text-shadow:0 1px 4px #000}
+
+#callout{position:fixed;left:50%;top:22%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;opacity:0}
+#callout .ck{font-family:var(--f-kanji);font-weight:800;font-size:min(22vw,150px);line-height:1;color:#fff;
+  text-shadow:0 0 2px #000,0 0 30px rgba(220,20,30,.9),0 0 80px rgba(160,0,10,.7);letter-spacing:.04em;white-space:nowrap}
+#callout .cn{font-size:14px;letter-spacing:.5em;text-transform:uppercase;color:var(--bone);margin-top:6px;text-shadow:0 1px 6px #000}
+#callout.big .ck{font-size:min(15vw,120px)}
+#callout.show{animation:call 1.1s cubic-bezier(.2,.7,.2,1) forwards}
+@keyframes call{0%{opacity:0;transform:translate(-50%,-50%) scale(1.5);filter:blur(6px)}
+  12%{opacity:1;transform:translate(-50%,-50%) scale(1);filter:blur(0)}
+  70%{opacity:1}100%{opacity:0;transform:translate(-50%,-50%) scale(.97)}}
+
+.intro{position:fixed;inset:0;display:grid;place-items:center;background:radial-gradient(ellipse at 50% 40%,rgba(80,6,12,.55),rgba(5,3,4,.94) 70%);
+  padding:24px max(16px,env(safe-area-inset-right,0px)) 24px max(16px,env(safe-area-inset-left,0px));overflow:auto}
+.intro[hidden]{display:none}
+.intro-card{max-width:560px;display:grid;gap:18px;text-align:left}
+.intro h1{margin:0;font-family:var(--f-kanji);font-weight:800;font-size:clamp(44px,12vw,84px);line-height:1;color:var(--blood);letter-spacing:.04em;
+  text-shadow:0 0 40px rgba(195,21,31,.5);text-wrap:balance}
+.intro .sub{font-size:13px;letter-spacing:.42em;text-transform:uppercase;color:var(--bone);margin-top:-6px}
+.intro p{margin:0;line-height:1.65;color:#cfc2b4;font-size:15px;max-width:60ch}
+.ctl{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:13px;color:#cfc2b4}
+.ctl dt{font-family:var(--f-kanji);font-weight:800;font-size:18px;color:var(--bone)}
+.ctl dd{margin:0;align-self:center}
+.ctl dd b{color:var(--bone);font-weight:700}
+.start{justify-self:start;background:var(--blood);border:0;color:#fff;font-weight:700;letter-spacing:.2em;text-transform:uppercase;padding:14px 24px;cursor:pointer;font-size:14px}
+.start:hover{background:#dd1d28}
+.note{font-size:11px;color:var(--ash);letter-spacing:.04em}
+
+@media (max-width:640px){
+  .tech{padding:6px 10px 6px 8px;column-gap:6px}
+  .tech .k{font-size:22px}
+  .tech .d{display:none}
+  .tech .n{font-size:11px}
+  .tog span.lbl{display:none}
+  .hint{display:none}
+  .tech kbd{display:none}
+  .brand-l{display:none}
+}
+@media (prefers-reduced-motion:reduce){#callout.show{animation-duration:.8s}}
+</style>
+</head>
+<body>
+<canvas id="stage" aria-label="Game stage"></canvas>
+
+<header class="hud-top">
+  <div class="vitals">
+    <div class="brand"><span class="brand-k">伏魔御厨子</span><span class="brand-l">Malevolent Shrine</span></div>
+    <div class="status-row"><span class="status" id="status">Alive</span><span class="reason" id="reason">Subject is standing</span></div>
+    <div class="bar" title="Blood volume"><i id="bloodBar"></i></div>
+    <div class="stats"><span>Blood <b id="bloodTxt">100%</b></span><span>Cuts <b id="cutsTxt">0</b></span><span>Pieces <b id="piecesTxt">0</b></span></div>
+  </div>
+  <div class="toggles">
+    <button class="tog" id="tXray" aria-pressed="false" title="Show anatomy through the skin"><span class="lbl">X-ray</span><kbd>X</kbd></button>
+    <button class="tog" id="tSlow" aria-pressed="false" title="Slow motion"><span class="lbl">Slow-mo</span><kbd>T</kbd></button>
+    <button class="tog" id="tSound" aria-pressed="true" title="Sound"><span class="lbl">Sound</span><kbd>M</kbd></button>
+    <button class="tog" id="tReset" title="New subject"><span class="lbl">New subject</span><kbd>R</kbd></button>
+  </div>
+</header>
+
+<nav class="techniques" aria-label="Techniques">
+  <button class="tech active" data-mode="dismantle"><span class="k">解</span><span class="n">Dismantle</span><span class="d">Drag to cut a line</span><kbd>1</kbd></button>
+  <button class="tech" data-mode="cleave"><span class="k">捌</span><span class="n">Cleave</span><span class="d">Tap a part to carve it</span><kbd>2</kbd></button>
+  <button class="tech" data-mode="fuga"><span class="k">開</span><span class="n">Fuga</span><span class="d">Flame arrow</span><kbd>3</kbd></button>
+  <button class="tech domain" id="domainBtn"><span class="k">領域</span><span class="n">Domain</span><span class="d">Malevolent Shrine</span><kbd>4</kbd><span class="cd" id="domainCd"></span></button>
+  <button class="tech" data-mode="grab"><span class="k">掴</span><span class="n">Grab</span><span class="d">Drag the pieces</span><kbd>5</kbd></button>
+</nav>
+<div class="hint" id="hint"></div>
+<div id="callout"><div class="ck"></div><div class="cn"></div></div>
+
+<div class="intro" id="intro">
+  <div class="intro-card">
+    <h1>伏魔御厨子</h1>
+    <div class="sub">Malevolent Shrine</div>
+    <p>A test subject with full human anatomy stands in your domain: skin, fat, muscle, bone, and every major organ. Every cut slices through the real layers, so you see ribs, lungs, heart, gut and marrow in cross-section.</p>
+    <dl class="ctl">
+      <dt>解</dt><dd><b>Dismantle.</b> Drag a line across the body. Tap for a quick slash.</dd>
+      <dt>捌</dt><dd><b>Cleave.</b> Tap a body part and it gets carved into chunks.</dd>
+      <dt>開</dt><dd><b>Fuga.</b> Tap to fire a flame arrow that burns and blasts.</dd>
+      <dt>領域</dt><dd><b>Domain Expansion.</b> Press 4 for four seconds of nonstop slashes.</dd>
+      <dt>掴</dt><dd><b>Grab.</b> Drag pieces around. Right-drag grabs in any mode.</dd>
+    </dl>
+    <button class="start" id="startBtn">Open the domain</button>
+    <div class="note">Contains cartoon gore and anatomical cross-sections. X toggles an X-ray view of the anatomy.</div>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+/* ================= basics ================= */
+const TAU = Math.PI * 2;
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const rnd = (a, b) => a + Math.random() * (b - a);
+function mulberry(seed){ return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function wrapA(a){ while (a > Math.PI) a -= TAU; while (a < -Math.PI) a += TAU; return a; }
+const reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function hull(pts){
+  const p = pts.map(q => [q[0], q[1]]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cr = (o, a, b) => (a[0]-o[0])*(b[1]-o[1]) - (a[1]-o[1])*(b[0]-o[0]);
+  const lo = [], up = [];
+  for (const q of p){ while (lo.length >= 2 && cr(lo[lo.length-2], lo[lo.length-1], q) <= 0) lo.pop(); lo.push(q); }
+  for (let i = p.length - 1; i >= 0; i--){ const q = p[i]; while (up.length >= 2 && cr(up[up.length-2], up[up.length-1], q) <= 0) up.pop(); up.push(q); }
+  up.pop(); lo.pop(); return lo.concat(up);
+}
+function capsulePts(x1,y1,r1,x2,y2,r2,n=14){ const pts=[]; for(let i=0;i<n;i++){ const a=i/n*TAU; pts.push([x1+Math.cos(a)*r1,y1+Math.sin(a)*r1],[x2+Math.cos(a)*r2,y2+Math.sin(a)*r2]); } return hull(pts); }
+function ellipsePts(cx,cy,rx,ry,n){ const pts=[]; for(let i=0;i<n;i++){ const a=i/n*TAU; pts.push([cx+Math.cos(a)*rx,cy+Math.sin(a)*ry]); } return hull(pts); }
+const mirror = pts => pts.map(([x,y]) => [-x,y]);
+function polyProps(v){
+  let A=0,cx=0,cy=0,I=0; const n=v.length;
+  for (let i=0;i<n;i++){ const [x0,y0]=v[i], [x1,y1]=v[(i+1)%n]; const cr=x0*y1-x1*y0; A+=cr; cx+=(x0+x1)*cr; cy+=(y0+y1)*cr; I+=cr*(x0*x0+x0*x1+x1*x1+y0*y0+y0*y1+y1*y1); }
+  A*=0.5; if (Math.abs(A) < 1e-6) return null; cx/=(6*A); cy/=(6*A); I = I/12 - A*(cx*cx+cy*cy);
+  return { area: Math.abs(A), cx, cy, I: Math.abs(I) };
+}
+function pointInPoly(x,y,v){ let inside=false; for (let i=0,j=v.length-1;i<v.length;j=i++){ const xi=v[i][0],yi=v[i][1],xj=v[j][0],yj=v[j][1]; if(((yi>y)!==(yj>y)) && (x < (xj-xi)*(y-yi)/(yj-yi)+xi)) inside=!inside; } return inside; }
+function distToSeg(px,py,x1,y1,x2,y2){ const dx=x2-x1,dy=y2-y1,l2=dx*dx+dy*dy; let t=l2?((px-x1)*dx+(py-y1)*dy)/l2:0; t=clamp(t,0,1); return Math.hypot(px-x1-dx*t, py-y1-dy*t); }
+function segsCross(ax,ay,bx,by,cx,cy,dx,dy){ const d=(bx-ax)*(dy-cy)-(by-ay)*(dx-cx); if(Math.abs(d)<1e-9) return false; const t=((cx-ax)*(dy-cy)-(cy-ay)*(dx-cx))/d, u=((cx-ax)*(by-ay)-(cy-ay)*(bx-ax))/d; return t>=0&&t<=1&&u>=0&&u<=1; }
+function polyEdgeDist(x,y,v){ let m=1e9; for(let i=0;i<v.length;i++){ const a=v[i],b=v[(i+1)%v.length]; m=Math.min(m,distToSeg(x,y,a[0],a[1],b[0],b[1])); } return m; }
+
+/* ================= config ================= */
+const RES = 5;          // texture pixels per world unit
+const BAND = 9;         // depth of exposed tissue along a cut
+const G = 1100;
+const DT = 1/120;
+const ITER = 10;
+const DENS = 0.01;
+const MIN_CUT_AREA = 32;
+const MAX_PIECES = 520;
+
+/* ================= body plan (rest pose, units ~ cm, y down, feet on y=0) ================= */
+const SEG = {};
+function defSeg(name, poly, z){ SEG[name] = { name, poly: hull(poly), z }; }
+defSeg('neck', capsulePts(0,-322,7.2, 0,-299,7.8), 0);
+defSeg('thighL', capsulePts(-13,-181,11.5,-13,-101,8), 1);
+defSeg('thighR', mirror(capsulePts(-13,-181,11.5,-13,-101,8)), 1);
+defSeg('shinL', capsulePts(-13,-102,8.2,-13,-21,5.6), 2);
+defSeg('shinR', mirror(capsulePts(-13,-102,8.2,-13,-21,5.6)), 2);
+const FOOT = [[-18,-21],[-8,-21],[-5,-8],[-4,-1],[-6,0],[-24,0],[-25,-2],[-21,-8]];
+defSeg('footL', FOOT, 3);
+defSeg('footR', mirror(FOOT), 3);
+defSeg('pelvis', [[-25.5,-206],[25.5,-206],[29,-188],[21,-166],[-21,-166],[-29,-188]], 4);
+defSeg('abdomen', [[-27.5,-242],[27.5,-242],[25.5,-201],[-25.5,-201]], 5);
+defSeg('chest', [[-30,-307],[30,-307],[36.5,-297],[34.5,-270],[28,-236],[-28,-236],[-34.5,-270],[-36.5,-297]], 6);
+defSeg('head', ellipsePts(0,-337,17,22,28), 7);
+defSeg('upperArmL', capsulePts(-38,-297,8.6,-42,-242,6.6), 8);
+defSeg('upperArmR', mirror(capsulePts(-38,-297,8.6,-42,-242,6.6)), 8);
+defSeg('forearmL', capsulePts(-42,-242,6.6,-45.5,-189,5), 9);
+defSeg('forearmR', mirror(capsulePts(-42,-242,6.6,-45.5,-189,5)), 9);
+const HAND = ellipsePts(-46.5,-176,6.3,12.5,18).concat([[-40.3,-178],[-40.6,-172]]);
+defSeg('handL', HAND, 10);
+defSeg('handR', mirror(HAND), 10);
+
+const TORSO_SIL = [[8,-307],[30,-307],[36.5,-297],[34.5,-270],[28,-238],[26.2,-215],[25.5,-204],[29,-188],[21,-166],[-21,-166],[-29,-188],[-25.5,-204],[-26.2,-215],[-28,-238],[-34.5,-270],[-36.5,-297],[-30,-307],[-8,-307]];
+
+// [parent, child, x, y, lowerLimit, upperLimit, flail amount]
+const JOINTS = [
+  ['head','neck',0,-319,-0.55,0.55,0.25],
+  ['neck','chest',0,-302,-0.35,0.35,0.2],
+  ['chest','abdomen',0,-239,-0.3,0.3,0.12],
+  ['abdomen','pelvis',0,-204,-0.3,0.3,0.12],
+  ['chest','upperArmL',-35.5,-297,-0.4,2.9,1.3],
+  ['chest','upperArmR',35.5,-297,-2.9,0.4,1.3],
+  ['upperArmL','forearmL',-42,-242,-2.3,0.15,1.0],
+  ['upperArmR','forearmR',42,-242,-0.15,2.3,1.0],
+  ['forearmL','handL',-45.5,-187,-0.9,0.9,0.6],
+  ['forearmR','handR',45.5,-187,-0.9,0.9,0.6],
+  ['pelvis','thighL',-13,-180,-0.5,1.4,0.45],
+  ['pelvis','thighR',13,-180,-1.4,0.5,0.45],
+  ['thighL','shinL',-13,-101.5,-1.2,1.2,0.5],
+  ['thighR','shinR',13,-101.5,-1.2,1.2,0.5],
+  ['shinL','footL',-13,-18,-0.5,0.5,0.3],
+  ['shinR','footR',13,-18,-0.5,0.5,0.3],
+];
+const BRAIN = [0,-345], HEART = [5.5,-256], PELVIS_PT = [0,-190];
+
+/* ================= anatomy textures ================= */
+const COL = {
+  skin:'#d39b78', dermis:'#e7b7a0', fat:'#efcd78', muscle:'#9e2630', muscleLight:'#c2434b', muscleDark:'#6f141c',
+  bone:'#ede4cd', boneDark:'#b5a37c', marrow:'#a8323a', cart:'#cde2dd', cavity:'#3f0c12', artery:'#d3121d', vein:'#30439a',
+  nerve:'#efe2a2', brain:'#e7a6ab', lung:'#df8c93', heart:'#8b1421', liver:'#6b1d18', stomach:'#d49783', intestine:'#e3a694',
+  intestineDark:'#a05a4b', colon:'#c4876a', kidney:'#7a2224', bladder:'#e2bf7c', trachea:'#e8d6cd', tendon:'#e9ddcc',
+  shorts:'#1e1c26', hair:'#211510'
+};
+
+function bbox(v){ let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9; for (const [x,y] of v){ x0=Math.min(x0,x); y0=Math.min(y0,y); x1=Math.max(x1,x); y1=Math.max(y1,y); } return [x0,y0,x1,y1]; }
+function pathPts(c, pts, close=true){ c.beginPath(); c.moveTo(pts[0][0],pts[0][1]); for (let i=1;i<pts.length;i++) c.lineTo(pts[i][0],pts[i][1]); if (close) c.closePath(); }
+function ln(c,x1,y1,x2,y2,w,col){ c.beginPath(); c.moveTo(x1,y1); c.lineTo(x2,y2); c.lineWidth=w; c.strokeStyle=col; c.lineCap='round'; c.stroke(); }
+function dot(c,x,y,r,col){ c.beginPath(); c.arc(x,y,r,0,TAU); c.fillStyle=col; c.fill(); }
+function ell(c,x,y,rx,ry,rot,col){ c.beginPath(); c.ellipse(x,y,rx,ry,rot||0,0,TAU); c.fillStyle=col; c.fill(); }
+function curve(c, pts, w, col){
+  c.beginPath(); c.moveTo(pts[0][0],pts[0][1]);
+  if (pts.length === 2) c.lineTo(pts[1][0],pts[1][1]);
+  for (let i=1;i<pts.length-1;i++){ const mx=(pts[i][0]+pts[i+1][0])/2, my=(pts[i][1]+pts[i+1][1])/2; c.quadraticCurveTo(pts[i][0],pts[i][1], i===pts.length-2?pts[i+1][0]:mx, i===pts.length-2?pts[i+1][1]:my); }
+  c.lineWidth=w; c.strokeStyle=col; c.lineCap='round'; c.lineJoin='round'; c.stroke();
+}
+function tube(c, pts, w, col, edge){ curve(c,pts,w+1.1,edge); curve(c,pts,w,col); curve(c,pts,w*0.22,'rgba(255,255,255,.2)'); }
+function vessel(c, pts, w, col){ curve(c,pts,w+0.5,'rgba(20,0,5,.45)'); curve(c,pts,w,col); }
+function boneSeg(c,x1,y1,x2,y2,w,e1,e2,marrow=true){
+  ln(c,x1,y1,x2,y2,w+1.1,COL.boneDark); dot(c,x1,y1,e1+0.55,COL.boneDark); dot(c,x2,y2,e2+0.55,COL.boneDark);
+  ln(c,x1,y1,x2,y2,w,COL.bone); dot(c,x1,y1,e1,COL.bone); dot(c,x2,y2,e2,COL.bone);
+  if (marrow){ const k=0.17; ln(c,x1+(x2-x1)*k,y1+(y2-y1)*k,x2-(x2-x1)*k,y2-(y2-y1)*k,w*0.42,COL.marrow); }
+}
+function striate(c,x1,y1,x2,y2,hw,n,rng,alpha=0.22){
+  const dx=x2-x1, dy=y2-y1, L=Math.hypot(dx,dy), nx=-dy/L, ny=dx/L;
+  for (let i=0;i<n;i++){
+    const o=(rng()*2-1)*hw, t0=rng()*0.25, t1=0.75+rng()*0.25;
+    c.beginPath(); c.moveTo(x1+dx*t0+nx*o, y1+dy*t0+ny*o); c.lineTo(x1+dx*t1+nx*o, y1+dy*t1+ny*o);
+    c.lineWidth=0.25+rng()*0.4; c.strokeStyle = rng()<0.5 ? `rgba(55,0,8,${alpha})` : `rgba(235,120,120,${alpha*0.7})`; c.lineCap='round'; c.stroke();
+  }
+}
+function rings(c, pts, open, layers){
+  c.lineJoin='round'; c.lineCap='round';
+  for (const [w,col] of layers){ pathPts(c,pts,!open); c.lineWidth=w*2; c.strokeStyle=col; c.stroke(); }
+}
+const limbRings = (fat, derm=0.9) => [[fat+derm, COL.fat],[derm, COL.dermis],[0.32, COL.skin]];
+const torsoRings = (mus, fat=2.4) => [[mus+fat+0.9, COL.muscle],[fat+0.9, COL.fat],[0.9, COL.dermis],[0.32, COL.skin]];
+function vertebrae(c, x, y0, y1, hw, step){
+  for (let y=y0; y<y1; y+=step){
+    c.fillStyle=COL.boneDark; c.fillRect(x-hw-0.5, y+0.2, hw*2+1, step-0.6);
+    c.fillStyle=COL.bone; c.fillRect(x-hw, y+0.5, hw*2, step-1.2);
+    c.fillStyle=COL.cart; c.fillRect(x-hw*0.9, y+step-0.7, hw*1.8, 0.7);
+    ln(c,x-hw,y+step*0.5,x-hw-1.6,y+step*0.6,0.9,COL.boneDark); ln(c,x+hw,y+step*0.5,x+hw+1.6,y+step*0.6,0.9,COL.boneDark);
+  }
+}
+
+function sideOf(name){ return name.endsWith('L') ? -1 : name.endsWith('R') ? 1 : 0; }
+function baseOf(name){ return name.replace(/[LR]$/,''); }
+
+/* ---------- interior drawings ---------- */
+const INNER = {
+  head(c){
+    const rng = mulberry(11);
+    c.fillStyle=COL.dermis; c.fillRect(-20,-362,40,50);
+    ell(c,0,-338.5,15.9,20.4,0,COL.boneDark); ell(c,0,-338.5,15.1,19.6,0,COL.bone);
+    ell(c,0,-345.2,12.9,12.7,0,'#7a2630');
+    ell(c,0,-345.4,12.2,12,0,COL.brain);
+    for (let i=0;i<34;i++){ const a=rng()*TAU, r=Math.sqrt(rng())*10.5; let x=Math.cos(a)*r, y=-345.4+Math.sin(a)*r;
+      const pts=[[x,y]]; for(let k=0;k<3;k++){ x+= (rng()-.5)*4; y+=(rng()-.5)*4; pts.push([x,y]); } curve(c,pts,0.55,'rgba(150,70,82,.75)'); }
+    ln(c,0,-357,0,-334,0.8,'#8a3c48');
+    ell(c,0,-333.6,7.4,3.3,0,'#d78e96'); for(let i=-3;i<=3;i++) ln(c,i*1.8,-335.5,i*2,-331.5,0.35,'rgba(140,60,70,.7)');
+    c.fillStyle='#e0aaa2'; c.fillRect(-2,-333,4,10);
+    for (const s of [-1,1]){
+      ell(c,s*6.5,-334.5,4.5,3.9,0,'#3a1418');
+      ell(c,s*6.5,-334.5,3.4,3.2,0,'#f3eee6');
+      dot(c,s*6.2,-334.5,1.5,'#4a3426'); dot(c,s*6.2,-334.5,0.7,'#0a0606');
+      ln(c,s*3.4,-335,s*1.4,-337.5,0.9,COL.nerve);
+    }
+    c.beginPath(); c.moveTo(0,-331.5); c.lineTo(2.7,-324); c.lineTo(-2.7,-324); c.closePath(); c.fillStyle='#3a1418'; c.fill();
+    ln(c,0,-331,0,-324.3,0.5,COL.bone);
+    ell(c,0,-319.6,6.7,2.9,0,'#5e1820'); ell(c,0,-318.8,4.6,1.6,0,'#d2737a');
+    for (let i=-3;i<=3;i++){ c.fillStyle='#f6f1e6'; c.fillRect(i*1.65-0.7,-322.2,1.4,1.9); c.fillRect(i*1.65-0.7,-318.4,1.4,1.6); }
+    c.beginPath(); c.moveTo(-14.5,-331); c.quadraticCurveTo(-13,-317,0,-315.6); c.quadraticCurveTo(13,-317,14.5,-331);
+    c.lineWidth=2.2; c.strokeStyle=COL.bone; c.stroke();
+    rings(c, SEG.head.poly, false, [[1.8,COL.dermis],[0.32,COL.skin]]);
+  },
+  neck(c){
+    const rng = mulberry(12);
+    c.fillStyle=COL.muscle; c.fillRect(-9,-331,18,42);
+    for (const s of [-1,1]) striate(c,s*6.5,-329,s*1.5,-295,2.4,10,rng);
+    vertebrae(c,0,-330,-291,3.6,4.3);
+    ln(c,-1.4,-328,-1.4,-292,4,'#c98a86');
+    ln(c,0,-328,0,-292,4.6,COL.trachea);
+    for (let y=-327;y<-292;y+=2) ln(c,-2.1,y,2.1,y,0.55,'#bba39a');
+    for (const s of [-1,1]){
+      ell(c,s*3.2,-304.5,2.3,3.5,0,'#a8424a');
+      vessel(c,[[s*4.7,-330],[s*4.5,-311],[s*4.4,-292]],1.5,COL.artery);
+      vessel(c,[[s*6.1,-330],[s*6,-311],[s*5.9,-292]],1.8,COL.vein);
+      ln(c,s*5.4,-330,s*5.3,-292,0.6,COL.nerve);
+    }
+    rings(c, SEG.neck.poly, false, limbRings(1.6, 0.8));
+  },
+  chest(c){
+    const rng = mulberry(13);
+    c.fillStyle=COL.cavity; c.fillRect(-40,-310,80,78);
+    vertebrae(c,0,-308,-235,5.4,5.6);
+    vessel(c,[[3.8,-283],[3.6,-260],[3.4,-235]],3.2,COL.artery);
+    for (const s of [-1,1]){
+      c.beginPath(); c.moveTo(s*6.5,-299);
+      c.bezierCurveTo(s*13,-306, s*26,-298, s*29.5,-272);
+      c.bezierCurveTo(s*31.5,-256, s*29.5,-244, s*26.5,-240);
+      c.quadraticCurveTo(s*17,-247, s*(s>0?12:7),-243.5);
+      if (s>0) c.bezierCurveTo(16,-253, 12,-264, 8,-276); else c.bezierCurveTo(-8,-258,-5,-272,-5.5,-280);
+      c.bezierCurveTo(s*6,-289, s*5,-294, s*6.5,-299); c.closePath();
+      const g=c.createRadialGradient(s*17,-272,2,s*17,-270,26); g.addColorStop(0,'#eba0a6'); g.addColorStop(1,'#b45f69');
+      c.fillStyle=g; c.fill(); c.lineWidth=0.6; c.strokeStyle='#8f3f4a'; c.stroke();
+      c.save(); c.clip();
+      for (let i=0;i<120;i++) dot(c, s*(6+rng()*25), -300+rng()*60, 0.3+rng()*0.6, `rgba(150,60,72,${0.25+rng()*0.3})`);
+      curve(c,[[s*28,-280],[s*18,-268],[s*8,-252]],0.6,'rgba(110,40,50,.8)');
+      if (s<0) curve(c,[[-29,-262],[-20,-260],[-12,-257]],0.6,'rgba(110,40,50,.8)');
+      for (let i=0;i<7;i++){ const y0=-286+i*5; curve(c,[[s*9,-280],[s*(13+i),y0+4],[s*(18+i*1.3),y0+rng()*4]],0.6,'rgba(230,200,195,.6)'); }
+      c.restore();
+      tube(c,[[0,-284],[s*5,-280],[s*10,-276]],2.2,COL.trachea,'#a9948b');
+    }
+    tube(c,[[0,-309],[0,-296],[0,-284]],4.2,COL.trachea,'#a9948b');
+    for (let y=-307;y<-286;y+=2) ln(c,-1.9,y,1.9,y,0.5,'#bba39a');
+    ell(c,5.5,-257,12.6,14.4,-0.5,'rgba(190,90,98,.55)');
+    c.save(); c.translate(5.5,-256.5); c.rotate(-0.55);
+    const hg=c.createRadialGradient(-3,-4,1,0,0,13); hg.addColorStop(0,'#b02436'); hg.addColorStop(1,'#5f0c16');
+    c.beginPath(); c.ellipse(0,0,10.4,12.8,0,0,TAU); c.fillStyle=hg; c.fill(); c.lineWidth=0.6; c.strokeStyle='#3d050c'; c.stroke();
+    curve(c,[[-1,-12],[1,-3],[0.5,6],[-1,12]],0.8,'rgba(40,0,6,.7)');
+    curve(c,[[-6,-8],[-3,-1],[-4,6]],0.7,'#e8b04a'); curve(c,[[5,-9],[3,-2],[5,5]],0.7,'#e8b04a');
+    curve(c,[[-6,-8],[-3,-1],[-4,6]],0.35,COL.artery); curve(c,[[5,-9],[3,-2],[5,5]],0.35,COL.artery);
+    c.restore();
+    vessel(c,[[-3.2,-264],[-3.6,-280],[-4,-295]],3.2,COL.vein);
+    c.beginPath(); c.moveTo(2.5,-266); c.bezierCurveTo(0,-288,10,-291,8.5,-276); c.lineWidth=4.6; c.strokeStyle='#40000a'; c.stroke(); c.lineWidth=3.8; c.strokeStyle=COL.artery; c.stroke();
+    vessel(c,[[1.8,-282],[1.2,-297]],1.4,COL.artery); vessel(c,[[4.5,-285],[4.5,-298]],1.3,COL.artery); vessel(c,[[7,-284],[9.5,-297]],1.3,COL.artery);
+    vessel(c,[[8,-265],[5,-272],[2,-277]],3,'#4c5cba');
+    c.beginPath(); c.moveTo(-31,-238); c.quadraticCurveTo(-15,-254,0,-246); c.quadraticCurveTo(15,-254,31,-238); c.lineWidth=2.6; c.strokeStyle=COL.muscle; c.stroke();
+    for (let k=0;k<10;k++){
+      const ys=-299+k*6.2;
+      for (const s of [-1,1]){
+        const ex=s*(30.5 - Math.max(0,k-6)*0.8), ey=ys+7+k*0.75;
+        c.beginPath(); c.moveTo(s*3.6,ys); c.quadraticCurveTo(s*22,ys-4-k*0.2,ex,ey); c.lineCap='round';
+        c.lineWidth=3.5; c.strokeStyle=COL.boneDark; c.stroke(); c.lineWidth=2.5; c.strokeStyle=COL.bone; c.stroke();
+        ln(c,s*3.6,ys,s*(k>6?11:8.5),ys-0.6,2.2,COL.cart);
+      }
+    }
+    c.fillStyle=COL.boneDark; c.fillRect(-4.1,-301.5,8.2,42); c.fillStyle=COL.bone; c.fillRect(-3.5,-301,7,41);
+    ell(c,0,-299.5,5,3.4,0,COL.bone);
+    c.beginPath(); c.moveTo(-2,-260); c.lineTo(2,-260); c.lineTo(0,-255); c.closePath(); c.fillStyle=COL.cart; c.fill();
+    for (const s of [-1,1]){
+      c.beginPath(); c.moveTo(s*3.5,-302); c.bezierCurveTo(s*12,-299,s*20,-306,s*31,-302); c.lineCap='round';
+      c.lineWidth=3.9; c.strokeStyle=COL.boneDark; c.stroke(); c.lineWidth=2.9; c.strokeStyle=COL.bone; c.stroke();
+    }
+    rings(c, TORSO_SIL, true, torsoRings(5.5));
+  },
+  abdomen(c){
+    const rng = mulberry(14);
+    c.fillStyle=COL.cavity; c.fillRect(-30,-245,60,47);
+    vertebrae(c,0,-244,-199,6.4,6.8);
+    vessel(c,[[3.6,-245],[3.6,-222],[3.6,-199]],3.2,COL.artery);
+    vessel(c,[[-3.6,-245],[-3.6,-222],[-3.6,-199]],3.5,COL.vein);
+    for (const s of [-1,1]){
+      vessel(c,[[s*3.6,-226],[s*10,-226]],1.4,s>0?COL.artery:COL.vein);
+      ell(c,s*14.5,-226,5.2,8.2,s*0.2,'#4a0e12'); ell(c,s*14.5,-226,4.6,7.6,s*0.2,COL.kidney);
+      ell(c,s*11.2,-226,1.6,2.4,0,COL.cavity);
+      ln(c,s*11,-222,s*9,-199,0.9,'#e4c8a0');
+    }
+    ln(c,-2,-228,14,-226,2.8,'#e7c48a');
+    ell(c,23.5,-232,3,5,0.3,'#6b2340');
+    tube(c,[[-20.5,-200],[-21,-217],[-18.5,-222],[0,-222.6],[18.5,-222],[21,-217],[20.5,-200]],5.2,COL.colon,'#7e4c38');
+    for (let i=0;i<14;i++){ const y=-218+i*1.3; ln(c,-23.4,y,-18.6,y,0.35,'rgba(90,40,30,.55)'); ln(c,18.6,y,23.4,y,0.35,'rgba(90,40,30,.55)'); }
+    for (let x=-16;x<=16;x+=2.6) ln(c,x,-225.2,x,-220,0.35,'rgba(90,40,30,.55)');
+    c.save(); c.beginPath(); c.ellipse(0,-210,17.5,9.5,0,0,TAU); c.clip();
+    c.fillStyle=COL.intestineDark; c.fillRect(-20,-222,40,24);
+    for (let i=0;i<18;i++){
+      let x=-15+rng()*30, y=-218+rng()*16, a=rng()*TAU; const pts=[[x,y]];
+      for (let k=0;k<6;k++){ a+=(rng()-.5)*2.6; x+=Math.cos(a)*4.2; y+=Math.sin(a)*4.2; pts.push([x,y]); }
+      tube(c,pts,3.3,COL.intestine,'#8d4a3c');
+    }
+    c.restore();
+    c.beginPath(); c.moveTo(-27.5,-242); c.lineTo(16,-242); c.quadraticCurveTo(10,-236,2,-233); c.quadraticCurveTo(-12,-226,-25,-224.5); c.quadraticCurveTo(-28.5,-232,-27.5,-242); c.closePath();
+    const lg=c.createLinearGradient(-20,-242,0,-226); lg.addColorStop(0,'#8a2a22'); lg.addColorStop(1,'#4d120f'); c.fillStyle=lg; c.fill();
+    c.lineWidth=0.6; c.strokeStyle='#2e0806'; c.stroke();
+    curve(c,[[-24,-238],[-14,-236],[-6,-237]],0.8,'rgba(255,220,210,.18)');
+    ell(c,-9,-229.8,2.1,3.1,0.4,'#5b7a2e');
+    c.save(); c.translate(13,-233.5); c.rotate(-0.38);
+    c.beginPath(); c.ellipse(0,0,9,6.1,0,0,TAU); c.fillStyle=COL.stomach; c.fill(); c.lineWidth=0.6; c.strokeStyle='#8c5444'; c.stroke();
+    for (let i=-3;i<=3;i++) curve(c,[[i*2.2,-4],[i*2.2+1,0],[i*2.2,4]],0.4,'rgba(140,70,55,.6)');
+    c.restore();
+    rings(c, TORSO_SIL, true, torsoRings(4.2));
+  },
+  pelvis(c){
+    const rng = mulberry(15);
+    c.fillStyle=COL.muscle; c.fillRect(-32,-208,64,44);
+    for (const s of [-1,1]) striate(c,s*24,-204,s*10,-170,8,26,rng);
+    ell(c,0,-192,17,10.5,0,COL.cavity);
+    tube(c,[[-20.5,-205],[-17,-193],[-7,-189],[0,-187],[0,-178]],4.6,COL.colon,'#7e4c38');
+    ell(c,0,-180.5,6.4,4.8,0,COL.bladder); ell(c,-1.5,-182,2,1,0,'rgba(255,255,255,.25)');
+    for (const s of [-1,1]){
+      vessel(c,[[s*3.6,-207],[s*9,-192],[s*12.5,-178],[s*13,-166]],2,COL.artery);
+      vessel(c,[[s*1,-207],[s*7.5,-191],[s*11,-178],[s*11.5,-166]],2.2,COL.vein);
+      ln(c,s*6,-196,s*14,-168,1.3,COL.nerve);
+    }
+    for (const s of [-1,1]){
+      c.beginPath(); c.moveTo(s*4.5,-200); c.bezierCurveTo(s*10,-207.5,s*24.5,-208,s*27.5,-198); c.bezierCurveTo(s*28.5,-191,s*23,-185.5,s*18.5,-183); c.quadraticCurveTo(s*12,-188.5,s*5,-190); c.closePath();
+      c.fillStyle=COL.bone; c.fill(); c.lineWidth=0.8; c.strokeStyle=COL.boneDark; c.stroke();
+      ell(c,s*16,-197,6,3.6,s*-0.3,'rgba(181,163,124,.45)');
+      c.beginPath(); c.arc(s*13,-180,6.4,0,TAU); c.lineWidth=2.6; c.strokeStyle=COL.bone; c.stroke();
+      c.beginPath(); c.moveTo(s*7.5,-176.5); c.quadraticCurveTo(s*14,-171.5,s*18,-174.5); c.quadraticCurveTo(s*18.5,-168,s*10,-167); c.quadraticCurveTo(s*3,-167.8,s*1.4,-171); c.quadraticCurveTo(s*3,-175.5,s*7.5,-176.5); c.closePath();
+      c.fillStyle=COL.bone; c.fill(); c.lineWidth=0.7; c.strokeStyle=COL.boneDark; c.stroke();
+      ell(c,s*11,-172.3,3.1,2.1,0,COL.muscle);
+    }
+    c.beginPath(); c.moveTo(-5.5,-206); c.lineTo(5.5,-206); c.lineTo(2,-186); c.lineTo(-2,-186); c.closePath(); c.fillStyle=COL.bone; c.fill(); c.strokeStyle=COL.boneDark; c.lineWidth=0.7; c.stroke();
+    for (let i=0;i<4;i++){ dot(c,-2.6,-202+i*4,0.7,COL.boneDark); dot(c,2.6,-202+i*4,0.7,COL.boneDark); }
+    c.fillStyle=COL.cart; c.fillRect(-1.2,-174,2.4,5.5);
+    rings(c, TORSO_SIL, true, [[3.8+2.6+0.9+0.9,COL.muscle],[2.6+0.9+0.9,COL.fat],[1.8,COL.dermis],[1.0,COL.shorts]]);
+  },
+  upperArm(c,s){
+    const rng = mulberry(20+s);
+    pathPts(c, SEG[s<0?'upperArmL':'upperArmR'].poly); c.fillStyle=COL.muscle; c.fill();
+    ell(c,s*40.2,-268,5.4,17,s*0.07,'rgba(194,67,75,.55)');
+    ell(c,s*38,-292,8,7,0,'rgba(194,67,75,.35)');
+    striate(c,s*38,-300,s*42,-240,6.5,40,rng);
+    vessel(c,[[s*34.2,-292],[s*36.5,-268],[s*38.8,-246]],1.5,COL.vein);
+    vessel(c,[[s*35,-292],[s*37.3,-268],[s*39.6,-246]],1.3,COL.artery);
+    ln(c,s*35.9,-292,s*40.4,-246,0.8,COL.nerve);
+    vessel(c,[[s*44.5,-290],[s*46,-268],[s*47,-248]],1,COL.vein);
+    boneSeg(c,s*38.3,-293,s*42,-246,4.3,4.9,3.4);
+    ell(c,s*37.8,-295.5,4,4,0,'rgba(205,226,221,.6)');
+    ell(c,s*42,-243.5,4.4,2.6,0,COL.bone);
+    rings(c, SEG[s<0?'upperArmL':'upperArmR'].poly, false, limbRings(2.1));
+  },
+  forearm(c,s){
+    const rng = mulberry(30+s);
+    pathPts(c, SEG[s<0?'forearmL':'forearmR'].poly); c.fillStyle=COL.muscle; c.fill();
+    ell(c,s*43,-228,5,12,s*0.06,'rgba(194,67,75,.45)');
+    striate(c,s*42,-246,s*45.5,-186,5.5,34,rng);
+    boneSeg(c,s*44.5,-240,s*47.2,-193,2.4,2.4,3);
+    boneSeg(c,s*40.3,-242,s*43.6,-192,2.3,3,2);
+    vessel(c,[[s*46.6,-236],[s*48.3,-196]],0.9,COL.artery);
+    vessel(c,[[s*41.2,-236],[s*43.2,-196]],1,COL.artery);
+    vessel(c,[[s*39.6,-238],[s*42,-194]],1.1,COL.vein);
+    for (let i=0;i<4;i++) ln(c,s*(42.3+i*1.4),-206,s*(43.3+i*1.4),-188,0.7,COL.tendon);
+    rings(c, SEG[s<0?'forearmL':'forearmR'].poly, false, limbRings(1.7, 0.8));
+  },
+  hand(c,s){
+    pathPts(c, SEG[s<0?'handL':'handR'].poly); c.fillStyle='#b14a52'; c.fill();
+    for (let i=0;i<5;i++) ell(c,s*(44+i*1.1+(i%2)*0.6),-186+(i>2?1.5:0),1.5,1.2,0,COL.bone);
+    for (let i=0;i<4;i++){
+      const x=s*(43.5+i*2.1);
+      boneSeg(c,x,-183,x+s*0.3,-173,1.2,1,1,false);
+      boneSeg(c,x+s*0.3,-171.8,x+s*0.4,-167.5,1,0.9,0.8,false);
+      boneSeg(c,x+s*0.4,-166.4,x+s*0.45,-164.6,0.8,0.7,0.6,false);
+    }
+    boneSeg(c,s*42.8,-183,s*41.3,-177,1.2,1,1,false); boneSeg(c,s*41.2,-176,s*40.9,-173.2,1,0.9,0.7,false);
+    rings(c, SEG[s<0?'handL':'handR'].poly, false, limbRings(1.2, 0.8));
+  },
+  thigh(c,s){
+    const rng = mulberry(40+s); const P = SEG[s<0?'thighL':'thighR'].poly;
+    pathPts(c, P); c.fillStyle=COL.muscle; c.fill();
+    ell(c,s*15,-142,8,30,0,'rgba(194,67,75,.5)');
+    ell(c,s*7.5,-158,4.5,18,s*-0.1,'rgba(111,20,28,.55)');
+    striate(c,s*13,-190,s*13,-96,10.5,70,rng);
+    ln(c,s*14.5,-172,s*13.2,-112,1.6,COL.nerve);
+    vessel(c,[[s*7,-174],[s*8.4,-145],[s*11.4,-112]],2.3,COL.vein);
+    vessel(c,[[s*7.9,-174],[s*9.2,-145],[s*12.2,-112]],2,COL.artery);
+    ln(c,s*11.5,-180,s*18,-174.5,4.4,COL.boneDark); ln(c,s*11.5,-180,s*18,-174.5,3.5,COL.bone);
+    dot(c,s*11.5,-180,5.6,COL.boneDark); dot(c,s*11.5,-180,5,COL.bone); dot(c,s*11.2,-180.6,3,'rgba(205,226,221,.7)');
+    ell(c,s*19.6,-175,3.8,4.6,0,COL.boneDark); ell(c,s*19.6,-175,3.2,4,0,COL.bone);
+    boneSeg(c,s*17.2,-171,s*13.6,-110,6,3.5,4.4);
+    ell(c,s*13.6,-105.5,6.4,3.9,0,COL.boneDark); ell(c,s*13.6,-105.5,5.8,3.4,0,COL.bone);
+    c.save(); c.beginPath(); c.rect(-40,-200,80,49); c.clip();
+    rings(c, P, false, [[3+1+0.9,COL.fat],[1.9,COL.dermis],[1.0,COL.shorts]]);
+    c.restore();
+    c.save(); c.beginPath(); c.rect(-40,-151,80,70); c.clip();
+    rings(c, P, false, limbRings(3, 1));
+    c.restore();
+  },
+  shin(c,s){
+    const rng = mulberry(50+s); const P = SEG[s<0?'shinL':'shinR'].poly;
+    pathPts(c, P); c.fillStyle=COL.muscle; c.fill();
+    ell(c,s*15,-80,5.6,17,0,'rgba(194,67,75,.5)');
+    striate(c,s*13,-108,s*13,-18,7,48,rng);
+    vessel(c,[[s*6.6,-100],[s*7.6,-60],[s*8.6,-24]],1.2,COL.vein);
+    vessel(c,[[s*10,-95],[s*10.3,-60],[s*10.6,-28]],1,COL.artery);
+    vessel(c,[[s*15.6,-95],[s*15.6,-60],[s*15.2,-30]],0.9,COL.artery);
+    boneSeg(c,s*17.6,-99,s*16.8,-26,1.8,2.3,2.4);
+    boneSeg(c,s*11.6,-103,s*12,-25,4.6,5.2,3.6);
+    ell(c,s*12,-104.2,6.6,2.6,0,COL.bone);
+    ell(c,s*13,-103.5,4.4,5.4,0,COL.boneDark); ell(c,s*13,-103.5,3.8,4.8,0,COL.bone);
+    ln(c,s*13,-48,s*13,-22,2.4,COL.tendon);
+    rings(c, P, false, limbRings(1.6));
+  },
+  foot(c,s){
+    const P = SEG[s<0?'footL':'footR'].poly;
+    pathPts(c, P); c.fillStyle='#b14a52'; c.fill();
+    ell(c,s*13,-16,4,3,0,COL.boneDark); ell(c,s*13,-16,3.5,2.6,0,COL.bone);
+    for (let i=0;i<4;i++) ell(c,s*(9.5+i*2.4),-10.5+(i%2)*0.8,1.4,1.6,0,COL.bone);
+    for (let i=0;i<5;i++){ const x0=s*(9+i*2), x1=s*(7.8+i*3.6); boneSeg(c,x0,-8.5,x1,-3.4,1.1,0.9,0.8,false); dot(c,x1+s*0.3,-1.6,0.8,COL.bone); }
+    for (let i=0;i<3;i++) ln(c,s*(11+i*2),-20,s*(10+i*3),-6,0.5,COL.tendon);
+    rings(c, P, false, limbRings(1.2, 0.8));
+  },
+};
+
+/* ---------- skin drawings ---------- */
+function skinBase(c, poly, sil, x0, x1, open){
+  pathPts(c, poly); c.fillStyle=COL.skin; c.fill();
+  const g=c.createLinearGradient(x0,0,x1,0);
+  g.addColorStop(0,'rgba(92,40,22,.5)'); g.addColorStop(0.2,'rgba(92,40,22,0)'); g.addColorStop(0.45,'rgba(255,232,214,.14)');
+  g.addColorStop(0.78,'rgba(92,40,22,0)'); g.addColorStop(1,'rgba(92,40,22,.55)');
+  c.fillStyle=g; c.fillRect(x0-2,-400,x1-x0+4,420);
+  rings(c, sil, open, [[2.6,'rgba(96,44,26,.14)'],[1.2,'rgba(96,44,26,.18)']]);
+}
+const SKIN = {
+  head(c, dead){
+    const P=SEG.head.poly; skinBase(c,P,P,-17,17,false);
+    for (const s of [-1,1]){ ell(c,s*16.4,-336,2.9,5.2,0,'rgba(150,80,55,.5)'); ell(c,s*16.4,-336,1.3,3,0,'rgba(110,50,35,.45)'); }
+    c.beginPath(); c.moveTo(-18,-336); c.quadraticCurveTo(-18,-362,0,-361.5); c.quadraticCurveTo(18,-362,18,-336);
+    c.lineTo(15.5,-339); c.quadraticCurveTo(12,-350,5,-349); c.quadraticCurveTo(0,-352.5,-5,-349.5); c.quadraticCurveTo(-12,-351,-15.5,-340); c.closePath();
+    c.fillStyle=COL.hair; c.fill();
+    const rng=mulberry(7); for (let i=0;i<24;i++){ const x=-15+rng()*30; ln(c,x,-358+rng()*4,x+(rng()-.5)*5,-349+rng()*3,0.5,'rgba(70,45,30,.6)'); }
+    ell(c,-6.5,-326,3,1.6,0,'rgba(220,110,100,.18)'); ell(c,6.5,-326,3,1.6,0,'rgba(220,110,100,.18)');
+    c.beginPath(); c.moveTo(0.6,-334); c.quadraticCurveTo(2.2,-328,1.6,-325.6); c.quadraticCurveTo(0,-324.6,-1.8,-325.4); c.lineWidth=0.7; c.strokeStyle='rgba(110,52,32,.55)'; c.stroke();
+    dot(c,-1.2,-325.2,0.5,'rgba(70,30,20,.6)'); dot(c,1.2,-325.2,0.5,'rgba(70,30,20,.6)');
+    if (!dead){
+      ln(c,-10.5,-341,-3.4,-343.2,1.4,COL.hair); ln(c,10.5,-341,3.4,-343.2,1.4,COL.hair);
+      for (const s of [-1,1]){
+        ell(c,s*6.4,-336,3.7,2.5,0,'#f7f2ea'); dot(c,s*5.9,-335.8,1.7,'#3f2b1f'); dot(c,s*5.9,-335.8,0.8,'#080505'); dot(c,s*5.4,-336.5,0.45,'#fff');
+        c.beginPath(); c.ellipse(s*6.4,-336,3.8,2.6,0,Math.PI*1.05,Math.PI*1.95); c.lineWidth=0.6; c.strokeStyle='rgba(60,25,15,.8)'; c.stroke();
+      }
+      ell(c,0,-320.4,3.3,2.2,0,'#5a1a1e'); c.fillStyle='#f3ece2'; c.fillRect(-2.2,-322.4,4.4,0.9);
+    } else {
+      ln(c,-10.5,-341.6,-3.4,-341.6,1.3,COL.hair); ln(c,10.5,-341.6,3.4,-341.6,1.3,COL.hair);
+      for (const s of [-1,1]){
+        ell(c,s*6.4,-336,3.7,2.4,0,'rgba(120,60,45,.35)');
+        c.beginPath(); c.moveTo(s*2.8,-336); c.quadraticCurveTo(s*6.4,-334.4,s*10,-336); c.lineWidth=0.8; c.strokeStyle='rgba(50,20,12,.9)'; c.stroke();
+      }
+      ell(c,0,-320.2,3.4,1.2,0,'#4a1418');
+    }
+  },
+  neck(c){ const P=SEG.neck.poly; skinBase(c,P,P,-7.5,7.5,false); ell(c,0,-321,8,4,0,'rgba(80,35,20,.35)'); ell(c,0,-309,1.6,2.4,0,'rgba(255,225,205,.18)');
+    for (const s of [-1,1]) ln(c,s*5.5,-318,s*1.5,-300,1.1,'rgba(96,44,26,.18)'); },
+  chest(c){ skinBase(c,SEG.chest.poly,TORSO_SIL,-37,37,true);
+    for (const s of [-1,1]){
+      c.beginPath(); c.moveTo(s*27,-292); c.quadraticCurveTo(s*22,-270,s*3,-274); c.lineWidth=1.2; c.strokeStyle='rgba(96,44,26,.3)'; c.stroke();
+      ln(c,s*4,-301.5,s*27,-303,1.4,'rgba(255,230,210,.2)'); ln(c,s*4,-299.8,s*26,-301,0.8,'rgba(96,44,26,.22)');
+      dot(c,s*15,-276.5,1.2,'rgba(150,75,55,.55)');
+      for (let k=0;k<3;k++) ln(c,s*22,-262+k*6,s*28,-259+k*6,0.7,'rgba(96,44,26,.12)');
+    }
+    ln(c,0,-296,0,-262,0.8,'rgba(96,44,26,.2)'); },
+  abdomen(c){ skinBase(c,SEG.abdomen.poly,TORSO_SIL,-37,37,true);
+    ln(c,0,-242,0,-205,0.8,'rgba(96,44,26,.25)');
+    for (const y of [-235,-226]) for (const s of [-1,1]) ln(c,s*1.5,y,s*9,y+0.6,0.8,'rgba(96,44,26,.2)');
+    for (const s of [-1,1]) curve(c,[[s*11,-240],[s*11.5,-225],[s*9,-207]],0.8,'rgba(96,44,26,.2)');
+    ell(c,0,-213,1.2,1.9,0,'rgba(80,30,20,.7)'); },
+  pelvis(c){
+    skinBase(c,SEG.pelvis.poly,TORSO_SIL,-37,37,true);
+    pathPts(c, SEG.pelvis.poly); const g=c.createLinearGradient(-30,0,30,0); g.addColorStop(0,'#121017'); g.addColorStop(0.45,'#2a2733'); g.addColorStop(1,'#100e14');
+    c.fillStyle=g; c.fill();
+    c.fillStyle='#2f2c3a'; c.fillRect(-30,-206,60,4.2); ln(c,-30,-201.8,30,-201.8,0.5,'rgba(0,0,0,.6)');
+    ln(c,-1,-201.5,-2.5,-196,0.6,'#d9cfc0'); ln(c,1,-201.5,2.5,-196,0.6,'#d9cfc0');
+    ln(c,0,-195,0,-167,0.6,'rgba(255,255,255,.08)');
+    c.fillStyle='rgba(195,21,31,.7)'; c.fillRect(-29,-200,1.4,30); c.fillRect(27.6,-200,1.4,30);
+  },
+  upperArm(c,s){ const P=SEG[s<0?'upperArmL':'upperArmR'].poly; skinBase(c,P,P,s<0?-47:29,s<0?-29:47,false);
+    c.beginPath(); c.moveTo(s*31,-284); c.quadraticCurveTo(s*38,-279,s*46,-283); c.lineWidth=0.9; c.strokeStyle='rgba(96,44,26,.22)'; c.stroke();
+    ell(c,s*40,-266,3,10,s*0.07,'rgba(255,230,210,.1)'); },
+  forearm(c,s){ const P=SEG[s<0?'forearmL':'forearmR'].poly; skinBase(c,P,P,s<0?-51:36,s<0?-36:51,false);
+    ln(c,s*41,-240,s*41.5,-236,0.8,'rgba(96,44,26,.3)'); vessel(c,[[s*42.5,-228],[s*44,-205]],0.5,'rgba(70,90,160,.25)'); },
+  hand(c,s){ const P=SEG[s<0?'handL':'handR'].poly; skinBase(c,P,P,s<0?-53:40,s<0?-40:53,false);
+    for (let i=0;i<3;i++){ const x=s*(44.7+i*2.1); ln(c,x,-171.5,x+s*0.2,-164.2,0.55,'rgba(96,44,26,.45)'); }
+    for (let i=0;i<4;i++){ ell(c,s*(43.6+i*2.1),-165.4,0.8,0.9,0,'rgba(255,220,210,.45)'); }
+    ln(c,s*41.5,-180,s*40.8,-174,0.6,'rgba(96,44,26,.4)'); },
+  thigh(c,s){ const P=SEG[s<0?'thighL':'thighR'].poly; skinBase(c,P,P,s<0?-25:1,s<0?-1:25,false);
+    ell(c,s*15,-130,4.5,18,0,'rgba(255,230,210,.08)');
+    c.save(); pathPts(c,P); c.clip();
+    c.beginPath(); c.moveTo(-40,-200); c.lineTo(40,-200); c.lineTo(40,-150+(s<0?2:-2)); c.lineTo(-40,-150+(s<0?-2:2)); c.closePath();
+    const g=c.createLinearGradient(s<0?-25:1,0,s<0?-1:25,0); g.addColorStop(0,'#121017'); g.addColorStop(0.5,'#2a2733'); g.addColorStop(1,'#100e14');
+    c.fillStyle=g; c.fill();
+    c.fillStyle='rgba(195,21,31,.7)'; c.fillRect(s<0?-25:23.6,-200,1.4,50.5);
+    ln(c,-40,-150.8+(s<0?1.6:-1.6),40,-150.8+(s<0?-1.6:1.6),0.6,'rgba(255,255,255,.12)');
+    c.restore(); },
+  shin(c,s){ const P=SEG[s<0?'shinL':'shinR'].poly; skinBase(c,P,P,s<0?-22:4,s<0?-4:22,false);
+    ell(c,s*13,-103.5,4.6,5.6,0,'rgba(255,230,210,.13)'); c.beginPath(); c.ellipse(s*13,-103.5,4.8,5.8,0,0.2,Math.PI-0.2); c.lineWidth=0.7; c.strokeStyle='rgba(96,44,26,.3)'; c.stroke();
+    ln(c,s*11.5,-96,s*12,-40,0.8,'rgba(255,230,210,.12)'); dot(c,s*7.8,-22,1.4,'rgba(96,44,26,.2)'); dot(c,s*18.2,-23,1.4,'rgba(96,44,26,.2)'); },
+  foot(c,s){ const P=SEG[s<0?'footL':'footR'].poly; skinBase(c,P,P,s<0?-26:3,s<0?-3:26,false);
+    for (let i=0;i<4;i++){ const x=s*(9.5+i*3.4); ln(c,x,-3.6,x-s*0.3,-0.4,0.5,'rgba(96,44,26,.5)'); }
+    for (let i=0;i<5;i++) ell(c,s*(7.6+i*3.5),-1.3,1,0.7,0,'rgba(255,225,210,.5)'); },
+};
+
+const TEX = {};
+function makeCanvas(w,h){ const c=document.createElement('canvas'); c.width=Math.max(1,Math.ceil(w)); c.height=Math.max(1,Math.ceil(h)); return c; }
+function makeTex(name, draw){
+  const seg=SEG[name]; const b=bbox(seg.poly); const x0=b[0]-1, y0=b[1]-1, w=b[2]-b[0]+2, h=b[3]-b[1]+2;
+  const cnv=makeCanvas(w*RES,h*RES); const c=cnv.getContext('2d');
+  c.scale(RES,RES); c.translate(-x0,-y0); pathPts(c, seg.poly); c.clip(); draw(c);
+  return { cnv, x0, y0, w, h };
+}
+function buildTextures(){
+  for (const name in SEG){
+    const s=sideOf(name), base=baseOf(name);
+    TEX[name] = {
+      inner: makeTex(name, c => INNER[base](c,s)),
+      skin: makeTex(name, c => SKIN[base](c,s)),
+    };
+    if (name==='head') TEX[name].skinDead = makeTex(name, c => SKIN.head(c,true));
+  }
+}
+
+/* ================= pieces & physics ================= */
+let pieces=[], joints=[], nextId=1, grab=null;
+const state = { alive:true, fallen:false, blood:100, cuts:0, reason:'Subject is standing', flail:0, t:0, standX:0, pelvisY:0,
+  heartComp:-1, hitstop:0, shake:0, knock:0 };
+
+function buildPaths(p){
+  const v=p.v, n=v.length;
+  const body=new Path2D(), outline=new Path2D(), rim=new Path2D(), band=new Path2D();
+  body.moveTo(v[0][0],v[0][1]); for (let i=1;i<n;i++) body.lineTo(v[i][0],v[i][1]); body.closePath();
+  let cutLen=0; p.cutEdges=[];
+  for (let i=0;i<n;i++){
+    const a=v[i], b=v[(i+1)%n];
+    if (p.c[i]){
+      rim.moveTo(a[0],a[1]); rim.lineTo(b[0],b[1]);
+      const L=Math.hypot(b[0]-a[0],b[1]-a[1]); if (L<1e-4) continue; cutLen+=L;
+      const ex=(b[0]-a[0])/L, ey=(b[1]-a[1])/L; let nx=-ey, ny=ex;
+      if (nx*(p.cx-a[0])+ny*(p.cy-a[1]) < 0){ nx=-nx; ny=-ny; }
+      p.cutEdges.push([a[0],a[1],b[0],b[1],L,nx,ny]);
+      const q0=[a[0]-ex,a[1]-ey], q1=[b[0]+ex,b[1]+ey], q2=[q1[0]+nx*BAND,q1[1]+ny*BAND], q3=[q0[0]+nx*BAND,q0[1]+ny*BAND];
+      const pts = (ex*ny-ey*nx) > 0 ? [q0,q1,q2,q3] : [q3,q2,q1,q0];
+      band.moveTo(pts[0][0],pts[0][1]); for (let k=1;k<4;k++) band.lineTo(pts[k][0],pts[k][1]); band.closePath();
+    } else { outline.moveTo(a[0],a[1]); outline.lineTo(b[0],b[1]); }
+  }
+  p.body=body; p.outline=outline; p.rim=rim; p.band=band; p.cutLen=cutLen; p.hasCut=cutLen>0;
+}
+function makePiece(seg, verts, cuts){
+  const pr=polyProps(verts); if (!pr || pr.area<0.6) return null;
+  const p={ id:nextId++, seg, z:SEG[seg].z, v:verts, c:cuts, cx:pr.cx, cy:pr.cy, area:pr.area, m:pr.area*DENS, I:pr.I*DENS,
+    x:0,y:0,a:0,vx:0,vy:0,w:0, fam:0, char:0, burn:0, bleed:0, glow:0, comp:0, _i:0 };
+  p.im=1/p.m; p.iI=1/p.I;
+  let r=0; for (const [x,y] of verts) r=Math.max(r,Math.hypot(x-p.cx,y-p.cy)); p.rad=r;
+  buildPaths(p); return p;
+}
+function toWorld(p, rx, ry){ const c=Math.cos(p.a), s=Math.sin(p.a), dx=rx-p.cx, dy=ry-p.cy; return [p.x+c*dx-s*dy, p.y+s*dx+c*dy]; }
+function toRest(p, wx, wy){ const c=Math.cos(p.a), s=Math.sin(p.a), dx=wx-p.x, dy=wy-p.y; return [c*dx+s*dy+p.cx, -s*dx+c*dy+p.cy]; }
+function worldVerts(p){ const c=Math.cos(p.a), s=Math.sin(p.a); return p.v.map(([x,y]) => { const dx=x-p.cx, dy=y-p.cy; return [p.x+c*dx-s*dy, p.y+s*dx+c*dy]; }); }
+
+function spawn(){
+  pieces=[]; joints=[]; grab=null; const map={};
+  for (const name in SEG){
+    const poly=SEG[name].poly.map(q=>[q[0],q[1]]);
+    const p=makePiece(name, poly, poly.map(()=>false)); p.x=p.cx; p.y=p.cy; map[name]=p; pieces.push(p);
+  }
+  for (const j of JOINTS) joints.push({ a:map[j[0]], b:map[j[1]], jx:j[2], jy:j[3], lo:j[4], hi:j[5], flail:j[6], phase:Math.random()*TAU,
+    side: sideOf(j[1]), kind: baseOf(j[1]) });
+  Object.assign(state, { alive:true, fallen:false, blood:100, cuts:0, reason:'Subject is standing', flail:0, hitstop:0, shake:0, knock:0, standX:0 });
+  state.pelvisY = map.pelvis.y;
+  particles.length=0; fxs.length=0; queue.length=0; arrow=null;
+  clearWorldLayers();
+  computeComps(); updateVitals();
+}
+
+/* ---- cutting ---- */
+function splitPolygon(v, c, Px, Py, Dx, Dy){
+  const n=v.length, sd=new Array(n); let pos=0, neg=0;
+  for (let i=0;i<n;i++){ const s=Dx*(v[i][1]-Py)-Dy*(v[i][0]-Px); sd[i]=s; if (s>1e-6) pos++; else if (s<-1e-6) neg++; }
+  if (!pos || !neg) return null;
+  const A=[],Ac=[],B=[],Bc=[];
+  for (let i=0;i<n;i++){
+    const j=(i+1)%n, si=sd[i], sj=sd[j], vi=v[i], ina=si>=0, inj=sj>=0;
+    if (ina){ A.push(vi); Ac.push(c[i]); } else { B.push(vi); Bc.push(c[i]); }
+    if (ina!==inj){
+      const t=si/(si-sj), I=[vi[0]+(v[j][0]-vi[0])*t, vi[1]+(v[j][1]-vi[1])*t];
+      if (ina){ A.push(I); Ac.push(true); B.push([I[0],I[1]]); Bc.push(c[i]); }
+      else { B.push(I); Bc.push(true); A.push([I[0],I[1]]); Ac.push(c[i]); }
+    }
+  }
+  const a=cleanPoly(A,Ac), b=cleanPoly(B,Bc); if (!a || !b) return null; return [a,b];
+}
+function cleanPoly(P,F){
+  const out=[], of=[];
+  for (let i=0;i<P.length;i++){
+    if (out.length && Math.hypot(P[i][0]-out[out.length-1][0], P[i][1]-out[out.length-1][1]) < 1e-3){ of[of.length-1]=F[i]; continue; }
+    out.push(P[i]); of.push(F[i]);
+  }
+  while (out.length>1 && Math.hypot(out[out.length-1][0]-out[0][0], out[out.length-1][1]-out[0][1]) < 1e-3){ out.pop(); of.pop(); }
+  return out.length>=3 ? [out,of] : null;
+}
+function cutPiece(p, wx, wy, dx, dy, push){
+  if (p.area < MIN_CUT_AREA || pieces.length >= MAX_PIECES) return null;
+  const [Px,Py]=toRest(p,wx,wy), cs=Math.cos(p.a), sn=Math.sin(p.a);
+  const Dx=cs*dx+sn*dy, Dy=-sn*dx+cs*dy;
+  const res=splitPolygon(p.v,p.c,Px,Py,Dx,Dy); if (!res) return null;
+  const kids=res.map(([v,c]) => makePiece(p.seg,v,c)); if (kids.some(k=>!k)) return null;
+  const nx=-dy, ny=dx;
+  for (const k of kids){
+    const [x,y]=toWorld(p,k.cx,k.cy); k.x=x; k.y=y; k.a=p.a;
+    const rx=x-p.x, ry=y-p.y; k.vx=p.vx-p.w*ry; k.vy=p.vy+p.w*rx; k.w=p.w;
+    k.fam=p.fam; k.char=p.char; k.burn=p.burn; k.bleed=1; k.glow=1;
+    const side=Math.sign(dx*(y-wy)-dy*(x-wx)) || 1;
+    const f=push*clamp(Math.sqrt(400/k.area),0.6,2.2);
+    k.vx+=nx*side*f + dx*push*0.15; k.vy+=ny*side*f + dy*push*0.15;
+    k.w+=rnd(-1,1)*push*0.01;
+  }
+  const idx=pieces.indexOf(p); pieces.splice(idx,1,kids[0],kids[1]);
+  for (const j of joints){
+    for (const end of ['a','b']){
+      if (j[end]!==p) continue;
+      let best=kids.find(k=>pointInPoly(j.jx,j.jy,k.v)) || null;
+      if (!best){ let bd=1.5; for (const k of kids){ const d=polyEdgeDist(j.jx,j.jy,k.v); if (d<bd){ bd=d; best=k; } } }
+      j[end]=best;
+    }
+  }
+  joints=joints.filter(j=>j.a&&j.b);
+  if (grab && grab.p===p) grab=null;
+  if (state.alive){
+    const lineDist=(pt)=>Math.abs(Dx*(pt[1]-Py)-Dy*(pt[0]-Px));
+    if (p.seg==='head' && pointInPoly(BRAIN[0],BRAIN[1],p.v) && lineDist(BRAIN)<12) die('Brain split in two');
+    else if (p.seg==='chest' && pointInPoly(HEART[0],HEART[1],p.v) && lineDist(HEART)<10) die('Heart cleaved');
+  }
+  state.cuts++;
+  for (const k of kids) bloodBurst(k, 0.5);
+  return kids;
+}
+function segHitsPiece(p,x1,y1,x2,y2){
+  const wv=worldVerts(p);
+  for (let i=0;i<wv.length;i++){ const a=wv[i], b=wv[(i+1)%wv.length]; if (segsCross(x1,y1,x2,y2,a[0],a[1],b[0],b[1])) return true; }
+  return pointInPoly(x1,y1,wv) || pointInPoly(x2,y2,wv);
+}
+function slash(x1,y1,x2,y2,opt={}){
+  const L=Math.hypot(x2-x1,y2-y1); if (L<1) return 0;
+  const dx=(x2-x1)/L, dy=(y2-y1)/L, push=opt.push??45;
+  let hits=0;
+  for (const p of pieces.slice()){
+    if (opt.filter && !opt.filter(p)) continue;
+    if (distToSeg(p.x,p.y,x1,y1,x2,y2) > p.rad) continue;
+    if (!segHitsPiece(p,x1,y1,x2,y2)) continue;
+    if (cutPiece(p,x1,y1,dx,dy,push)) hits++;
+  }
+  const before=joints.length;
+  joints=joints.filter(j=>{
+    if (opt.filter && !opt.filter(j.a) && !opt.filter(j.b)) return true;
+    const [jx,jy]=toWorld(j.a,j.jx,j.jy); return distToSeg(jx,jy,x1,y1,x2,y2) > 2.4;
+  });
+  if (joints.length<before) hits++;
+  markWorld(x1,y1,x2,y2,opt.faint);
+  if (hits){
+    sfx.flesh(); if (state.alive) state.flail=Math.min(1.6,state.flail+0.7);
+    state.shake=Math.min(14,state.shake+(opt.faint?1.5:5)); if (!opt.faint) state.hitstop=0.05;
+    computeComps(); updateVitals();
+  }
+  return hits;
+}
+
+/* ---- connectivity & vitals ---- */
+function computeComps(){
+  const n=pieces.length, par=new Int32Array(n); for (let i=0;i<n;i++){ par[i]=i; pieces[i]._i=i; }
+  const find=i=>{ while(par[i]!==i){ par[i]=par[par[i]]; i=par[i]; } return i; };
+  for (const j of joints){ const a=find(j.a._i), b=find(j.b._i); if (a!==b) par[a]=b; }
+  for (let i=0;i<n;i++) pieces[i].comp=find(i);
+}
+function pieceAt(seg, pt){ for (const p of pieces) if (p.seg===seg && pointInPoly(pt[0],pt[1],p.v)) return p; return null; }
+function die(reason){
+  if (!state.alive) return; state.alive=false; state.fallen=true; state.reason=reason; state.flail=0;
+  sfx.thud();
+}
+function updateVitals(){
+  const brain=pieceAt('head',BRAIN), heart=pieceAt('chest',HEART), pelvis=pieceAt('pelvis',PELVIS_PT);
+  state.brainP=brain; state.heartP=heart; state.pelvisP=pelvis;
+  state.heartComp = heart ? heart.comp : -1;
+  if (state.alive){
+    if (!brain || !heart) die('Vital organ destroyed');
+    else if (brain.comp!==heart.comp){
+      die(pieces.some(p=>p.seg==='chest' && p.comp===brain.comp) ? 'Torso split apart' : 'Decapitated');
+    } else if (state.blood<30) die('Bled out');
+  }
+  if (state.alive && !state.fallen){
+    const ok = pelvis && pelvis.comp===state.heartComp && state.knock<=0 &&
+      pieces.some(p=>p.seg==='footL' && p.comp===state.heartComp) && pieces.some(p=>p.seg==='footR' && p.comp===state.heartComp);
+    if (!ok){ state.fallen=true; state.reason = state.knock>0 ? 'Knocked down' : 'Lost the ability to stand'; }
+  }
+}
+
+/* ---- solver ---- */
+const contacts=[];
+function solvePoint(A,B,rAx,rAy,rBx,rBy,Cx,Cy,beta,dt,soft){
+  const mA=A?A.im:0, iA=A?A.iI:0, mB=B.im, iB=B.iI;
+  const k11=mA+mB+iA*rAy*rAy+iB*rBy*rBy, k12=-iA*rAx*rAy-iB*rBx*rBy, k22=mA+mB+iA*rAx*rAx+iB*rBx*rBx;
+  const vBx=B.vx-B.w*rBy, vBy=B.vy+B.w*rBx, vAx=A?A.vx-A.w*rAy:0, vAy=A?A.vy+A.w*rAx:0;
+  const dvx=vBx-vAx+beta/dt*Cx, dvy=vBy-vAy+beta/dt*Cy;
+  const det=k11*k22-k12*k12; if (det<1e-12) return;
+  const Px=-(k22*dvx-k12*dvy)/det*soft, Py=-(-k12*dvx+k11*dvy)/det*soft;
+  B.vx+=Px*mB; B.vy+=Py*mB; B.w+=iB*(rBx*Py-rBy*Px);
+  if (A){ A.vx-=Px*mA; A.vy-=Py*mA; A.w-=iA*(rAx*Py-rAy*Px); }
+}
+function addContact(p,wx,wy,nx,ny,pen,dt){
+  const rx=wx-p.x, ry=wy-p.y;
+  const vx=p.vx-p.w*ry, vy=p.vy+p.w*rx, vn=vx*nx+vy*ny;
+  let bias=Math.min(0.25/dt*Math.max(0,pen-0.3), 400);
+  if (vn<-80) bias=Math.max(bias,-vn*0.12);
+  contacts.push({p,rx,ry,nx,ny,bias,jn:0,jt:0});
+}
+function physicsStep(dt){
+  for (const p of pieces){ p.vy+=G*dt; p.vx*=0.9995; p.vy*=0.9995; p.w*=0.997; }
+  control(dt);
+  contacts.length=0;
+  const HWb=HW-1;
+  for (const p of pieces){
+    if (p.y+p.rad < -0.6 && p.x-p.rad > -HWb && p.x+p.rad < HWb) continue;
+    const c=Math.cos(p.a), s=Math.sin(p.a);
+    for (const [x,y] of p.v){
+      const dx=x-p.cx, dy=y-p.cy, wx=p.x+c*dx-s*dy, wy=p.y+s*dx+c*dy;
+      if (wy>-0.4) addContact(p,wx,wy,0,-1,wy,dt);
+      if (wx<-HWb) addContact(p,wx,wy,1,0,-HWb-wx,dt);
+      if (wx>HWb) addContact(p,wx,wy,-1,0,wx-HWb,dt);
+    }
+  }
+  for (const j of joints){
+    const A=j.a, B=j.b;
+    let c=Math.cos(A.a), s=Math.sin(A.a), dx=j.jx-A.cx, dy=j.jy-A.cy; j.rax=c*dx-s*dy; j.ray=s*dx+c*dy;
+    c=Math.cos(B.a); s=Math.sin(B.a); dx=j.jx-B.cx; dy=j.jy-B.cy; j.rbx=c*dx-s*dy; j.rby=s*dx+c*dy;
+    j.Cx=(B.x+j.rbx)-(A.x+j.rax); j.Cy=(B.y+j.rby)-(A.y+j.ray);
+    j.rel=wrapA(B.a-A.a);
+  }
+  for (let it=0; it<ITER; it++){
+    for (const j of joints){
+      solvePoint(j.a,j.b,j.rax,j.ray,j.rbx,j.rby,j.Cx,j.Cy,0.2,dt,1);
+      const A=j.a, B=j.b, em=1/(A.iI+B.iI), relW=B.w-A.w;
+      if (j.rel<j.lo){ const tgt=(j.lo-j.rel)*0.2/dt; if (relW<tgt){ const L=(tgt-relW)*em; A.w-=A.iI*L; B.w+=B.iI*L; } }
+      else if (j.rel>j.hi){ const tgt=(j.hi-j.rel)*0.2/dt; if (relW>tgt){ const L=(tgt-relW)*em; A.w-=A.iI*L; B.w+=B.iI*L; } }
+    }
+    for (const ct of contacts){
+      const p=ct.p, rx=ct.rx, ry=ct.ry, nx=ct.nx, ny=ct.ny;
+      let vx=p.vx-p.w*ry, vy=p.vy+p.w*rx; const vn=vx*nx+vy*ny;
+      const rn=rx*ny-ry*nx, kn=p.im+p.iI*rn*rn;
+      let lam=(ct.bias-vn)/kn; const nj=Math.max(0,ct.jn+lam); lam=nj-ct.jn; ct.jn=nj;
+      p.vx+=nx*lam*p.im; p.vy+=ny*lam*p.im; p.w+=p.iI*(rx*ny*lam-ry*nx*lam);
+      vx=p.vx-p.w*ry; vy=p.vy+p.w*rx; const tx=-ny, ty=nx, vt=vx*tx+vy*ty;
+      const rt=rx*ty-ry*tx, kt=p.im+p.iI*rt*rt; let lt=-vt/kt; const mx=0.75*ct.jn;
+      const nt=clamp(ct.jt+lt,-mx,mx); lt=nt-ct.jt; ct.jt=nt;
+      p.vx+=tx*lt*p.im; p.vy+=ty*lt*p.im; p.w+=p.iI*(rx*ty*lt-ry*tx*lt);
+    }
+    if (grab){
+      const p=grab.p, c=Math.cos(p.a), s=Math.sin(p.a), dx=grab.rx-p.cx, dy=grab.ry-p.cy, rx=c*dx-s*dy, ry=s*dx+c*dy;
+      solvePoint(null,p,0,0,rx,ry,p.x+rx-grab.tx,p.y+ry-grab.ty,0.25,dt,0.35);
+    }
+  }
+  for (const p of pieces){
+    const sp=Math.hypot(p.vx,p.vy); if (sp>3200){ p.vx*=3200/sp; p.vy*=3200/sp; }
+    p.w=clamp(p.w,-60,60);
+    p.x+=p.vx*dt; p.y+=p.vy*dt; p.a+=p.w*dt;
+  }
+}
+function control(dt){
+  const st=state;
+  if (st.alive){
+    const standing=!st.fallen, k=standing?700:110, d=standing?38:8;
+    const fl=standing?st.flail:Math.max(st.flail,0.55);
+    for (const j of joints){
+      if (j.a.comp!==st.heartComp) continue;
+      let target=0;
+      if (j.kind==='upperArm') target=j.side*-0.1+0.05*Math.sin(st.t*1.4);
+      if (j.kind==='forearm') target=j.side*0.18;
+      target+=fl*j.flail*Math.sin(st.t*(standing?13:9)+j.phase);
+      target=clamp(target,j.lo,j.hi);
+      const A=j.a, B=j.b, rel=wrapA(B.a-A.a), relW=B.w-A.w, em=1/(A.iI+B.iI);
+      const L=(k*(target-rel)-d*relW)*dt*em; A.w-=A.iI*L; B.w+=B.iI*L;
+    }
+    if (standing && st.pelvisP){
+      for (const p of pieces) if (p.comp===st.heartComp) p.vy-=G*dt;
+      const pv=st.pelvisP;
+      pv.vy+=(160*(st.pelvisY-pv.y)-22*pv.vy)*dt;
+      pv.vx+=(25*(st.standX-pv.x)-10*pv.vx)*dt;
+      for (const p of [pv, st.heartP, st.brainP]){ if (!p) continue; p.w+=(380*(0-wrapA(p.a))-34*p.w)*dt; }
+    }
+  } else {
+    for (const j of joints){ const A=j.a, B=j.b, relW=B.w-A.w, em=1/(A.iI+B.iI); const L=-3*relW*dt*em; A.w-=A.iI*L; B.w+=B.iI*L; }
+  }
+}
+
+/* ================= particles, fx, world layers ================= */
+const particles=[], fxs=[], queue=[];
+let arrow=null;
+const MAXP=2600;
+function addP(o){ if (particles.length<MAXP) particles.push(o); }
+const BLOODS=['#7d0610','#8f0a14','#6a040c','#a3121c'];
+function bloodBurst(p, amount){
+  for (const e of p.cutEdges){
+    const n=Math.min(14, Math.ceil(e[4]*amount));
+    for (let i=0;i<n;i++){
+      const t=Math.random(), rx=e[0]+(e[2]-e[0])*t, ry=e[1]+(e[3]-e[1])*t;
+      const [wx,wy]=toWorld(p,rx,ry); const c=Math.cos(p.a), s=Math.sin(p.a);
+      const onx=-(c*e[5]-s*e[6]), ony=-(s*e[5]+c*e[6]); const sp=rnd(40,220);
+      addP({k:0,x:wx,y:wy,vx:p.vx+onx*sp+rnd(-40,40),vy:p.vy+ony*sp+rnd(-80,20),life:rnd(0.5,1.4),r:rnd(0.6,1.8),col:BLOODS[(Math.random()*4)|0]});
+    }
+  }
+}
+function emitBleed(p, dt, pumping){
+  if (!p.hasCut || p.bleed<0.02) return;
+  const rate=p.cutLen*p.bleed*(pumping?1.6:0.45);
+  if (pumping) state.blood=Math.max(0,state.blood-rate*dt*0.11);
+  p.bleed*=Math.exp(-dt/(pumping?7:2.6));
+  let n=rate*dt*0.35; n=Math.floor(n)+(Math.random()<n%1?1:0);
+  for (let i=0;i<n;i++){
+    const e=p.cutEdges[(Math.random()*p.cutEdges.length)|0], t=Math.random();
+    const [wx,wy]=toWorld(p,e[0]+(e[2]-e[0])*t,e[1]+(e[3]-e[1])*t); const c=Math.cos(p.a), s=Math.sin(p.a);
+    const onx=-(c*e[5]-s*e[6]), ony=-(s*e[5]+c*e[6]); const sp=pumping?rnd(30,150):rnd(0,30);
+    addP({k:0,x:wx,y:wy,vx:p.vx+onx*sp+rnd(-12,12),vy:p.vy+ony*sp,life:rnd(0.6,1.6),r:rnd(0.5,1.5),col:BLOODS[(Math.random()*4)|0]});
+  }
+}
+// persistent world layers: wall (blood + slash scars) and floor (pools)
+const WL={x0:-1400,x1:1400,y0:-520,y1:0,res:1.2}, FL={x0:-1400,x1:1400,y0:-4,y1:22,res:3};
+const wallCnv=makeCanvas((WL.x1-WL.x0)*WL.res,(WL.y1-WL.y0)*WL.res), wallCtx=wallCnv.getContext('2d');
+const floorCnv=makeCanvas((FL.x1-FL.x0)*FL.res,(FL.y1-FL.y0)*FL.res), floorCtx=floorCnv.getContext('2d');
+wallCtx.setTransform(WL.res,0,0,WL.res,-WL.x0*WL.res,-WL.y0*WL.res);
+floorCtx.setTransform(FL.res,0,0,FL.res,-FL.x0*FL.res,-FL.y0*FL.res);
+function clearWorldLayers(){ wallCtx.save(); wallCtx.setTransform(1,0,0,1,0,0); wallCtx.clearRect(0,0,wallCnv.width,wallCnv.height); wallCtx.restore();
+  floorCtx.save(); floorCtx.setTransform(1,0,0,1,0,0); floorCtx.clearRect(0,0,floorCnv.width,floorCnv.height); floorCtx.restore(); }
+function floorSplat(x, r, col, depth){ const y=depth ?? rnd(0.5,14); floorCtx.globalAlpha=0.85; ell(floorCtx,x,y,r*rnd(1.6,3),r*rnd(0.35,0.6),0,col); floorCtx.globalAlpha=1; }
+function wallSplat(x,y,r,col){ wallCtx.globalAlpha=0.6; dot(wallCtx,x,y,r,col); wallCtx.globalAlpha=1; }
+function markWorld(x1,y1,x2,y2,faint){
+  // scar on the backdrop and gouge on the floor, like the cut went through everything behind the body
+  const dx=x2-x1, dy=y2-y1, L=Math.hypot(dx,dy), ux=dx/L, uy=dy/L, ext=faint?60:140;
+  const ax=x1-ux*ext, ay=y1-uy*ext, bx=x2+ux*ext, by=y2+uy*ext;
+  wallCtx.save(); wallCtx.beginPath(); wallCtx.rect(WL.x0,WL.y0,WL.x1-WL.x0,-WL.y0-0.5); wallCtx.clip();
+  wallCtx.lineCap='round';
+  wallCtx.strokeStyle='rgba(0,0,0,0.55)'; wallCtx.lineWidth=faint?0.8:1.4; wallCtx.beginPath(); wallCtx.moveTo(ax,ay); wallCtx.lineTo(bx,by); wallCtx.stroke();
+  wallCtx.strokeStyle='rgba(255,200,180,0.10)'; wallCtx.lineWidth=0.5; wallCtx.beginPath(); wallCtx.moveTo(ax+0.9,ay+0.9); wallCtx.lineTo(bx+0.9,by+0.9); wallCtx.stroke();
+  wallCtx.restore();
+  if ((ay-0)*(by-0)<0){ const t=(0-ay)/(by-ay), gx=ax+(bx-ax)*t; floorCtx.strokeStyle='rgba(0,0,0,.6)'; floorCtx.lineWidth=0.7; floorCtx.beginPath(); floorCtx.moveTo(gx-uy*6,0.5); floorCtx.lineTo(gx+ux*10,rnd(8,18)); floorCtx.stroke(); }
+}
+function addSlashFx(x1,y1,x2,y2,w,kind){ fxs.push({kind:kind||'slash',x1,y1,x2,y2,w,t:0,life:kind==='domain'?0.32:0.42}); }
+
+/* ================= techniques ================= */
+let mode='dismantle', xray=false, slowmo=false, domain=null, domainCd=0;
+const DOMAIN_CD=12;
+
+function dismantle(x1,y1,x2,y2){
+  const L=Math.hypot(x2-x1,y2-y1), ux=(x2-x1)/L, uy=(y2-y1)/L;
+  const ax=x1-ux*40, ay=y1-uy*40, bx=x2+ux*40, by=y2+uy*40;
+  addSlashFx(ax,ay,bx,by,4.5); sfx.slash(); slash(ax,ay,bx,by,{push:50});
+  if (Math.random()<0.5 || !callout.recent()) callout.show('解','Dismantle');
+}
+function quickDismantle(x,y){ const a=rnd(0,Math.PI); const ux=Math.cos(a), uy=Math.sin(a); dismantle(x-ux*90,y-uy*90,x+ux*90,y+uy*90); }
+let famCounter=1;
+function cleave(target){
+  const fam=++famCounter; target.fam=fam; callout.show('捌','Cleave'); state.shake+=3;
+  fxs.push({kind:'mark',p:target,t:0,life:0.35});
+  const cuts=4+((Math.random()*2)|0);
+  for (let i=0;i<cuts;i++){
+    queue.push({t:0.12+i*0.06, fn:()=>{
+      const fam_=pieces.filter(p=>p.fam===fam); if (!fam_.length) return;
+      fam_.sort((a,b)=>b.area-a.area); const p=fam_[0];
+      const a=rnd(0,Math.PI), ux=Math.cos(a), uy=Math.sin(a), r=p.rad+8, ox=p.x+rnd(-0.25,0.25)*p.rad, oy=p.y+rnd(-0.25,0.25)*p.rad;
+      addSlashFx(ox-ux*r,oy-uy*r,ox+ux*r,oy+uy*r,3,'cleave'); sfx.slash();
+      slash(ox-ux*r,oy-uy*r,ox+ux*r,oy+uy*r,{push:35,filter:q=>q.fam===fam,faint:true});
+    }});
+  }
+}
+function fuga(tx,ty){
+  const sx=-HW-40, sy=-420; const L=Math.hypot(tx-sx,ty-sy);
+  arrow={x:sx,y:sy,tx,ty,ux:(tx-sx)/L,uy:(ty-sy)/L,sp:1500};
+  callout.show('開','Fuga'); sfx.fugaCharge();
+}
+function explode(x,y){
+  const R=78;
+  sfx.boom(); state.shake=Math.min(26,state.shake+22); fxs.push({kind:'ring',x,y,t:0,life:0.6}); fxs.push({kind:'flash',t:0,life:0.35});
+  for (let i=0;i<140;i++){ const a=rnd(0,TAU), sp=rnd(60,520); addP({k:2,x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-80,life:rnd(0.3,0.9),r:rnd(2,6)}); }
+  for (let i=0;i<40;i++){ const a=rnd(0,TAU), sp=rnd(20,140); addP({k:3,x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-60,life:rnd(1,2.2),r:rnd(5,12)}); }
+  for (let i=0;i<50;i++){ const a=rnd(0,TAU), sp=rnd(150,700); addP({k:4,x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-150,life:rnd(0.6,1.6),r:rnd(0.6,1.4)}); }
+  if (y>-30){ floorCtx.globalAlpha=0.7; ell(floorCtx,x,4,R*0.9,6,0,'#050202'); floorCtx.globalAlpha=1; }
+  wallCtx.save(); const g=wallCtx.createRadialGradient(x,y,2,x,y,R*1.2); g.addColorStop(0,'rgba(0,0,0,.55)'); g.addColorStop(1,'rgba(0,0,0,0)'); wallCtx.fillStyle=g; wallCtx.fillRect(x-R*1.2,y-R*1.2,R*2.4,R*2.4); wallCtx.restore();
+  let hitBody=false;
+  for (const p of pieces){
+    const dx=p.x-x, dy=p.y-y, d=Math.hypot(dx,dy), e=Math.max(0,d-p.rad*0.5);
+    if (e>=R) continue;
+    const f=1-e/R, ux=d>0.01?dx/d:0, uy=d>0.01?dy/d:-1;
+    p.char=Math.min(1,p.char+f*0.95); p.burn=Math.max(p.burn,1.5+2.5*f);
+    const dv=650*f*clamp(Math.sqrt(30/p.m),0.35,2.5);
+    p.vx+=ux*dv; p.vy+=uy*dv-260*f; p.w+=rnd(-10,10)*f;
+    if (p.comp===state.heartComp) hitBody=true;
+    if (state.alive && (p===state.brainP || p===state.heartP) && f>0.35) die('Incinerated');
+  }
+  if (hitBody && state.alive){ state.knock=1.5; state.fallen=true; state.reason='Knocked down'; state.flail=1.5; }
+  computeComps(); updateVitals();
+}
+function startDomain(){
+  if (domain || domainCd>0) return;
+  domain={t:0, acc:0, called:0}; sfx.domain(); callout.show('領域展開','Domain Expansion',true);
+}
+function domainSlash(){
+  let x,y;
+  if (pieces.length && Math.random()<0.8){ const p=pieces[(Math.random()*pieces.length)|0]; x=p.x+rnd(-12,12); y=p.y+rnd(-12,12); }
+  else { x=rnd(-HW*0.8,HW*0.8); y=rnd(-380,-10); }
+  const a=rnd(0,Math.PI), ux=Math.cos(a), uy=Math.sin(a), h=rnd(60,200);
+  addSlashFx(x-ux*h,y-uy*h,x+ux*h,y+uy*h,rnd(1.6,3.2),'domain'); sfx.slash();
+  slash(x-ux*h,y-uy*h,x+ux*h,y+uy*h,{push:rnd(40,90),faint:true});
+}
+function updateDomain(dt){
+  if (domainCd>0) domainCd=Math.max(0,domainCd-dt);
+  if (!domain) return;
+  domain.t+=dt; const t=domain.t;
+  if (t>0.75 && domain.called===0){ domain.called=1; callout.show('伏魔御厨子','Malevolent Shrine',true); }
+  if (t>1.3 && t<5.3){
+    domain.acc+=dt; while (domain.acc>0.05){ domain.acc-=0.05; domainSlash(); }
+    if (Math.random()<dt*14) state.shake=Math.max(state.shake,4);
+  }
+  if (t>6.4){ domain=null; domainCd=DOMAIN_CD; }
+}
+function domainAmt(){ if (!domain) return 0; const t=domain.t; return clamp(Math.min(t/0.7,(6.4-t)/0.9),0,1); }
+
+/* ================= sound ================= */
+const AC=window.AudioContext||window.webkitAudioContext;
+let ac=null, master=null, noiseBuf=null, muted=false, lastSlash=0;
+function audioInit(){
+  if (ac || !AC) return;
+  try{
+    ac=new AC(); master=ac.createGain(); master.gain.value=0.5; master.connect(ac.destination);
+    const len=ac.sampleRate*1.5; noiseBuf=ac.createBuffer(1,len,ac.sampleRate); const d=noiseBuf.getChannelData(0); for (let i=0;i<len;i++) d[i]=Math.random()*2-1;
+  }catch(e){ ac=null; }
+}
+function noise(dur,type,f0,f1,q,vol,att=0.003){
+  if (!ac||muted) return; const t=ac.currentTime;
+  const src=ac.createBufferSource(); src.buffer=noiseBuf; const f=ac.createBiquadFilter(); f.type=type; f.Q.value=q;
+  f.frequency.setValueAtTime(f0,t); f.frequency.exponentialRampToValueAtTime(Math.max(30,f1),t+dur);
+  const g=ac.createGain(); g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(vol,t+att); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  src.connect(f); f.connect(g); g.connect(master); src.start(t,Math.random()*0.4); src.stop(t+dur+0.05);
+}
+function tone(dur,type,f0,f1,vol,att=0.005,lp){
+  if (!ac||muted) return; const t=ac.currentTime;
+  const o=ac.createOscillator(); o.type=type; o.frequency.setValueAtTime(f0,t); o.frequency.exponentialRampToValueAtTime(Math.max(20,f1),t+dur);
+  const g=ac.createGain(); g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(vol,t+att); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  let node=o; if (lp){ const f=ac.createBiquadFilter(); f.type='lowpass'; f.frequency.value=lp; o.connect(f); node=f; }
+  node.connect(g); g.connect(master); o.start(t); o.stop(t+dur+0.05);
+}
+const sfx={
+  slash(){ const n=performance.now(); if (n-lastSlash<38) return; lastSlash=n; noise(0.16,'bandpass',7500,1600,1.4,0.45); tone(0.1,'sine',2900,1900,0.04); },
+  flesh(){ noise(0.2,'lowpass',1000,180,0.9,0.3); },
+  thud(){ noise(0.35,'lowpass',380,60,1,0.45); tone(0.4,'sine',80,40,0.25); },
+  fugaCharge(){ noise(0.45,'bandpass',400,2600,0.8,0.22,0.25); },
+  boom(){ noise(1.5,'lowpass',1400,50,0.7,0.9,0.005); tone(1.1,'sine',95,28,0.55); },
+  domain(){ tone(5.5,'sawtooth',55,51,0.16,0.8,320); tone(5.5,'sawtooth',55.6,51.5,0.13,0.8,320); tone(3.5,'sine',196,195,0.07,0.01); tone(3.8,'sine',293,292,0.045,0.01); noise(1.2,'bandpass',200,1800,2,0.15,0.6); },
+};
+
+/* ================= rendering ================= */
+const cv=document.getElementById('stage'), ctx=cv.getContext('2d');
+let W=0,H=0,DPR=1,S=1,HW=200,OX=0,OY=0, bgN=null, bgD=null;
+function resize(){
+  DPR=Math.min(window.devicePixelRatio||1,2); W=Math.floor(innerWidth*DPR); H=Math.floor(innerHeight*DPR);
+  cv.width=W; cv.height=H;
+  const bottomUI=(innerWidth<640?120:104)*DPR, topUI=96*DPR;
+  S=Math.max(0.5,Math.min((H-bottomUI-topUI)/390, W/300));
+  OX=W/2; OY=H-bottomUI; HW=W/S/2;
+  buildBackgrounds();
+}
+function buildBackgrounds(){
+  bgN=makeCanvas(W,H); let c=bgN.getContext('2d');
+  let g=c.createLinearGradient(0,0,0,OY); g.addColorStop(0,'#07050a'); g.addColorStop(0.65,'#150b10'); g.addColorStop(1,'#2a1513');
+  c.fillStyle=g; c.fillRect(0,0,W,OY);
+  const mx=OX+Math.min(HW-50,170)*S, my=OY-330*S, mr=30*S;
+  g=c.createRadialGradient(mx,my,mr*0.5,mx,my,mr*5); g.addColorStop(0,'rgba(210,90,70,.22)'); g.addColorStop(1,'rgba(210,90,70,0)'); c.fillStyle=g; c.fillRect(0,0,W,OY);
+  g=c.createRadialGradient(mx-mr*0.3,my-mr*0.3,mr*0.1,mx,my,mr); g.addColorStop(0,'#f6dcc4'); g.addColorStop(1,'#c4765c'); c.fillStyle=g; c.beginPath(); c.arc(mx,my,mr,0,TAU); c.fill();
+  const rng=mulberry(3);
+  for (const [base,amp,col,step] of [[-150,70,'#120a0e',26],[-95,45,'#0d0709',18]]){
+    c.beginPath(); c.moveTo(0,OY); let h=0;
+    for (let x=-HW-30; x<=HW+30; x+=step){ h=clamp(h+(rng()-0.5)*amp*0.7,-amp,amp); c.lineTo(OX+x*S, OY+(base+h)*S); }
+    c.lineTo(W,OY); c.closePath(); c.fillStyle=col; c.fill();
+  }
+  c.setTransform(S,0,0,S,OX,OY);
+  for (const x of [-HW*0.62, HW*0.55]){ c.fillStyle='#0a0507'; c.fillRect(x-38,-120,6,120); c.fillRect(x+32,-120,6,120); c.fillRect(x-48,-128,96,7); c.fillRect(x-42,-110,84,4); }
+  c.setTransform(1,0,0,1,0,0);
+  g=c.createLinearGradient(0,OY,0,H); g.addColorStop(0,'#1d1213'); g.addColorStop(1,'#070405'); c.fillStyle=g; c.fillRect(0,OY,W,H-OY);
+  c.strokeStyle='rgba(255,215,195,.035)'; c.lineWidth=1;
+  for (let i=1;i<14;i++){ const y=OY+Math.pow(i,1.55)*2.2*S; c.beginPath(); c.moveTo(0,y); c.lineTo(W,y); c.stroke(); }
+  c.fillStyle='rgba(255,190,160,.10)'; c.fillRect(0,OY-1,W,2);
+
+  bgD=makeCanvas(W,H); c=bgD.getContext('2d');
+  g=c.createRadialGradient(OX,OY-200*S,10,OX,OY-160*S,Math.max(W,H)*0.8); g.addColorStop(0,'#9a1015'); g.addColorStop(0.35,'#4c0509'); g.addColorStop(1,'#120103');
+  c.fillStyle=g; c.fillRect(0,0,W,OY);
+  c.setTransform(S,0,0,S,OX,OY); drawShrine(c); c.setTransform(1,0,0,1,0,0);
+  g=c.createLinearGradient(0,OY,0,H); g.addColorStop(0,'#3a0307'); g.addColorStop(1,'#0c0002'); c.fillStyle=g; c.fillRect(0,OY,W,H-OY);
+  c.strokeStyle='rgba(255,80,80,.10)'; for (let i=0;i<26;i++){ const y=OY+rnd(2,(H-OY)); c.beginPath(); c.ellipse(rnd(0,W),y,rnd(20,120)*S*0.4,rnd(1,3),0,0,TAU); c.stroke(); }
+  c.fillStyle='rgba(255,90,80,.18)'; c.fillRect(0,OY-1,W,2);
+}
+function drawShrine(c){
+  const ink='#140103', rng=mulberry(9);
+  c.fillStyle=ink;
+  c.fillRect(-200,-24,400,24); c.fillRect(-178,-38,356,14);
+  for (const x of [-150,-106,-62,62,106,150]) c.fillRect(x-5,-158,10,122);
+  const roof=(w,y,h)=>{ c.beginPath(); c.moveTo(-w-60,y+14); c.quadraticCurveTo(-w-18,y+4,-w+8,y-h); c.lineTo(w-8,y-h); c.quadraticCurveTo(w+18,y+4,w+60,y+14); c.quadraticCurveTo(w+14,y+8,w-10,y-2); c.lineTo(-w+10,y-2); c.quadraticCurveTo(-w-14,y+8,-w-60,y+14); c.closePath(); c.fill(); };
+  roof(180,-158,24);
+  c.fillRect(-112,-246,224,66); for (const x of [-90,-30,30,90]){ c.fillStyle='#2a0307'; c.fillRect(x-14,-236,28,46); c.fillStyle=ink; }
+  roof(120,-246,22);
+  c.beginPath(); c.ellipse(0,-298,92,44,0,0,TAU); c.fill();
+  c.beginPath(); c.ellipse(0,-296,66,21,0,0,TAU); c.fillStyle='#4a0309'; c.fill();
+  c.fillStyle='#b9a69a';
+  for (let i=-6;i<=6;i++){ const x=i*9.6; c.beginPath(); c.moveTo(x-4,-313); c.lineTo(x+4,-313); c.lineTo(x,-302+Math.abs(i)*0.4); c.closePath(); c.fill(); c.beginPath(); c.moveTo(x-4,-279); c.lineTo(x+4,-279); c.lineTo(x,-289-Math.abs(i)*0.4); c.closePath(); c.fill(); }
+  c.strokeStyle=ink; c.lineWidth=12; c.lineCap='round';
+  for (const s of [-1,1]){ c.beginPath(); c.moveTo(s*64,-326); c.quadraticCurveTo(s*120,-350,s*112,-404); c.stroke(); }
+  for (let i=0;i<90;i++){
+    const x=(rng()*2-1)*280, y=-rng()*16-2, r=4+rng()*5;
+    dot(c,x,y,r,'#3a080b'); dot(c,x-r*0.35,y-r*0.05,r*0.25,'#0b0002'); dot(c,x+r*0.35,y-r*0.05,r*0.25,'#0b0002'); dot(c,x-r*0.2,y-r*0.45,r*0.35,'rgba(255,170,160,.08)');
+  }
+}
+
+function drawPiece(p){
+  const T=TEX[p.seg];
+  ctx.save(); ctx.translate(OX+p.x*S, OY+p.y*S); ctx.rotate(p.a); ctx.scale(S,S); ctx.translate(-p.cx,-p.cy);
+  ctx.save(); ctx.clip(p.body);
+  const skin=(p.seg==='head' && !state.alive) ? T.skinDead : T.skin;
+  if (xray){
+    ctx.drawImage(T.inner.cnv,T.inner.x0,T.inner.y0,T.inner.w,T.inner.h);
+    ctx.globalAlpha=0.2; ctx.drawImage(skin.cnv,skin.x0,skin.y0,skin.w,skin.h); ctx.globalAlpha=1;
+  } else {
+    ctx.drawImage(skin.cnv,skin.x0,skin.y0,skin.w,skin.h);
+    if (p.hasCut){ ctx.save(); ctx.clip(p.band); ctx.drawImage(T.inner.cnv,T.inner.x0,T.inner.y0,T.inner.w,T.inner.h); ctx.restore(); }
+  }
+  if (p.char>0.01){ ctx.fillStyle=`rgba(24,10,5,${p.char*0.82})`; ctx.fill(p.body); }
+  ctx.restore();
+  ctx.lineJoin='round'; ctx.lineCap='round';
+  ctx.strokeStyle='rgba(28,8,6,.5)'; ctx.lineWidth=0.7; ctx.stroke(p.outline);
+  if (p.hasCut){
+    ctx.strokeStyle='#36000a'; ctx.lineWidth=1.3; ctx.stroke(p.rim);
+    ctx.strokeStyle='rgba(255,90,90,.35)'; ctx.lineWidth=0.4; ctx.stroke(p.rim);
+    if (p.glow>0){ ctx.strokeStyle=`rgba(255,244,240,${p.glow})`; ctx.lineWidth=0.4+1.8*p.glow; ctx.stroke(p.rim); }
+  }
+  ctx.restore();
+}
+function drawFx(){
+  for (const f of fxs){
+    const k=f.t/f.life;
+    if (f.kind==='slash' || f.kind==='domain' || f.kind==='cleave'){
+      const grow=clamp(f.t/0.05,0,1), x2=f.x1+(f.x2-f.x1)*grow, y2=f.y1+(f.y2-f.y1)*grow;
+      const ax=OX+f.x1*S, ay=OY+f.y1*S, bx=OX+x2*S, by=OY+y2*S, fade=1-k;
+      ctx.lineCap='round';
+      ctx.strokeStyle=`rgba(190,0,16,${0.45*fade})`; ctx.lineWidth=f.w*3.2*S*fade; ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by); ctx.stroke();
+      ctx.strokeStyle=`rgba(5,0,2,${0.9*fade})`; ctx.lineWidth=f.w*1.3*S*fade; ctx.stroke();
+      ctx.strokeStyle=`rgba(255,250,245,${k<0.25?1:fade})`; ctx.lineWidth=Math.max(1,f.w*0.45*S*fade); ctx.stroke();
+    } else if (f.kind==='ring'){
+      ctx.strokeStyle=`rgba(255,170,90,${1-k})`; ctx.lineWidth=(1-k)*10*S; ctx.beginPath(); ctx.arc(OX+f.x*S,OY+f.y*S,(10+k*140)*S,0,TAU); ctx.stroke();
+    } else if (f.kind==='mark' && f.p){
+      ctx.strokeStyle=`rgba(255,40,50,${1-k})`; ctx.lineWidth=2*DPR; ctx.beginPath(); ctx.arc(OX+f.p.x*S,OY+f.p.y*S,(f.p.rad+6+k*10)*S,0,TAU); ctx.stroke();
+    }
+  }
+}
+function drawParticles(){
+  for (const col of BLOODS){
+    ctx.fillStyle=col; ctx.beginPath();
+    for (const q of particles){ if (q.k!==0 || q.col!==col) continue; const r=q.r*S; ctx.rect(OX+q.x*S-r/2,OY+q.y*S-r/2,r,r*1.3); }
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation='lighter';
+  for (const q of particles){
+    if (q.k===2){ const a=q.life/q.max; ctx.fillStyle=`rgba(255,${(90+120*a)|0},${(30*a)|0},${a*0.8})`; ctx.beginPath(); ctx.arc(OX+q.x*S,OY+q.y*S,q.r*S*(0.5+a),0,TAU); ctx.fill(); }
+    else if (q.k===4){ ctx.fillStyle=`rgba(255,180,90,${q.life/q.max})`; ctx.fillRect(OX+q.x*S,OY+q.y*S,q.r*S,q.r*S); }
+  }
+  ctx.globalCompositeOperation='source-over';
+  for (const q of particles){ if (q.k!==3) continue; const a=q.life/q.max; ctx.fillStyle=`rgba(30,22,22,${a*0.35})`; ctx.beginPath(); ctx.arc(OX+q.x*S,OY+q.y*S,q.r*S*(1.6-a),0,TAU); ctx.fill(); }
+}
+let drag=null, pointerW=null;
+function render(){
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.drawImage(bgN,0,0);
+  const da=domainAmt(); if (da>0){ ctx.globalAlpha=da; ctx.drawImage(bgD,0,0); ctx.globalAlpha=1; }
+  const sh=reduceMotion?0:state.shake; const ox=(Math.random()-0.5)*sh*DPR, oy=(Math.random()-0.5)*sh*DPR;
+  ctx.setTransform(1,0,0,1,ox,oy);
+  ctx.drawImage(wallCnv, OX+WL.x0*S, OY+WL.y0*S, (WL.x1-WL.x0)*S, (WL.y1-WL.y0)*S);
+  ctx.drawImage(floorCnv, OX+FL.x0*S, OY+FL.y0*S, (FL.x1-FL.x0)*S, (FL.y1-FL.y0)*S);
+  ctx.fillStyle='rgba(0,0,0,.28)'; ctx.beginPath();
+  for (const p of pieces){ if (p.y<-70) continue; const k=1-clamp(-p.y/70,0,1); const rx=p.rad*S*0.9*k; if (rx<0.5) continue; ctx.moveTo(OX+p.x*S+rx,OY+2*S); ctx.ellipse(OX+p.x*S,OY+2*S,rx,2.2*S*k,0,0,TAU); }
+  ctx.fill();
+  const order=pieces.slice().sort((a,b)=>a.z-b.z||a.id-b.id);
+  for (const p of order) drawPiece(p);
+  drawParticles();
+  drawFx();
+  if (arrow){
+    const ax=OX+arrow.x*S, ay=OY+arrow.y*S, tx=ax-arrow.ux*70*S, ty=ay-arrow.uy*70*S;
+    ctx.globalCompositeOperation='lighter';
+    const g=ctx.createLinearGradient(tx,ty,ax,ay); g.addColorStop(0,'rgba(255,80,0,0)'); g.addColorStop(1,'rgba(255,220,140,1)');
+    ctx.strokeStyle=g; ctx.lineWidth=7*S; ctx.lineCap='round'; ctx.beginPath(); ctx.moveTo(tx,ty); ctx.lineTo(ax,ay); ctx.stroke();
+    ctx.fillStyle='rgba(255,240,200,.9)'; ctx.beginPath(); ctx.arc(ax,ay,5*S,0,TAU); ctx.fill();
+    ctx.globalCompositeOperation='source-over';
+  }
+  if (drag && drag.kind==='dismantle' && drag.moved){
+    const ax=OX+drag.x0*S, ay=OY+drag.y0*S, bx=OX+drag.x1*S, by=OY+drag.y1*S;
+    ctx.setLineDash([6*DPR,6*DPR]); ctx.strokeStyle='rgba(255,60,70,.85)'; ctx.lineWidth=1.5*DPR; ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by); ctx.stroke(); ctx.setLineDash([]);
+    dot(ctx,ax,ay,3*DPR,'#ff3b46'); dot(ctx,bx,by,3*DPR,'#ff3b46');
+  }
+  ctx.setTransform(1,0,0,1,0,0);
+  for (const f of fxs){ if (f.kind==='flash'){ ctx.fillStyle=`rgba(255,200,150,${0.5*(1-f.t/f.life)})`; ctx.fillRect(0,0,W,H); } }
+  if (da>0){ const g=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*0.3,W/2,H/2,Math.max(W,H)*0.75); g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,`rgba(20,0,2,${0.7*da})`); ctx.fillStyle=g; ctx.fillRect(0,0,W,H); }
+}
+
+/* ================= update ================= */
+function updateGame(dt){
+  state.t+=dt;
+  state.shake*=Math.exp(-dt*9); if (state.shake<0.05) state.shake=0;
+  state.flail*=Math.exp(-dt*1.4);
+  if (state.knock>0) state.knock-=dt;
+  for (let i=queue.length-1;i>=0;i--){ queue[i].t-=dt; if (queue[i].t<=0){ const q=queue.splice(i,1)[0]; q.fn(); } }
+  computeComps(); updateVitals();
+  for (const p of pieces){
+    if (p.glow>0) p.glow=Math.max(0,p.glow-dt*3.5);
+    emitBleed(p,dt,state.alive && p.comp===state.heartComp);
+    if (p.burn>0){
+      p.burn-=dt; p.char=Math.min(1,p.char+dt*0.12);
+      if (Math.random()<dt*Math.min(40,p.area*0.08)){ const v=p.v[(Math.random()*p.v.length)|0]; const [x,y]=toWorld(p,v[0],v[1]); addP({k:2,x,y,vx:rnd(-15,15),vy:rnd(-90,-30),life:rnd(0.3,0.7),r:rnd(1.5,3.5)}); if (Math.random()<0.3) addP({k:3,x,y,vx:rnd(-10,10),vy:rnd(-50,-20),life:rnd(0.8,1.6),r:rnd(3,7)}); }
+    }
+  }
+  for (let i=particles.length-1;i>=0;i--){
+    const q=particles[i]; if (q.max===undefined) q.max=q.life;
+    q.life-=dt;
+    if (q.k===0){ q.vy+=G*0.8*dt; q.x+=q.vx*dt; q.y+=q.vy*dt;
+      if (q.y>=0){ floorSplat(q.x,q.r*rnd(0.9,1.6),q.col); particles.splice(i,1); continue; }
+      if (q.life<=0){ if (Math.random()<0.35) wallSplat(q.x,q.y,q.r*0.8,q.col); particles.splice(i,1); continue; }
+    } else {
+      if (q.k===2||q.k===3){ q.vx*=Math.exp(-dt*3); q.vy*=Math.exp(-dt*3); q.vy-=(q.k===2?120:40)*dt; }
+      else { q.vy+=G*0.6*dt; if (q.y>0){ q.y=0; q.vy*=-0.3; q.vx*=0.6; } }
+      q.x+=q.vx*dt; q.y+=q.vy*dt;
+      if (q.life<=0){ particles.splice(i,1); }
+    }
+  }
+  for (let i=fxs.length-1;i>=0;i--){ fxs[i].t+=dt; if (fxs[i].t>=fxs[i].life) fxs.splice(i,1); }
+  if (arrow){
+    const step=arrow.sp*dt, d=Math.hypot(arrow.tx-arrow.x,arrow.ty-arrow.y);
+    for (let k=0;k<3;k++) addP({k:2,x:arrow.x-arrow.ux*k*6,y:arrow.y-arrow.uy*k*6,vx:rnd(-30,30),vy:rnd(-30,30),life:rnd(0.15,0.4),r:rnd(2,4)});
+    if (d<=step){ const a=arrow; arrow=null; explode(a.tx,a.ty); } else { arrow.x+=arrow.ux*step; arrow.y+=arrow.uy*step; }
+  }
+  updateDomain(dt);
+}
+
+/* ================= HUD ================= */
+const $=id=>document.getElementById(id);
+const hud={status:$('status'),reason:$('reason'),bar:$('bloodBar'),blood:$('bloodTxt'),cuts:$('cutsTxt'),pieces:$('piecesTxt'),cd:$('domainCd'),domainBtn:$('domainBtn'),hint:$('hint')};
+const hudCache={};
+function setText(el,key,v){ if (hudCache[key]!==v){ hudCache[key]=v; el.textContent=v; } }
+function updateHUD(){
+  const st=state.alive?(state.fallen?'Down':'Alive'):'Dead';
+  setText(hud.status,'st',st); hud.status.className='status'+(st==='Dead'?' dead':st==='Down'?' down':'');
+  setText(hud.reason,'re',state.alive && state.fallen ? 'Down, still breathing' : state.reason);
+  const b=Math.round(state.blood); setText(hud.blood,'bl',b+'%'); hud.bar.style.transform=`scaleX(${state.blood/100})`;
+  setText(hud.cuts,'cu',String(state.cuts)); setText(hud.pieces,'pi',String(pieces.length));
+  const cdk = domain ? 1 : domainCd/DOMAIN_CD; hud.cd.style.transform=`scaleX(${cdk})`;
+  hud.domainBtn.disabled = !!domain || domainCd>0;
+}
+const callout=(()=>{ const el=$('callout'), k=el.querySelector('.ck'), n=el.querySelector('.cn'); let last=0;
+  return { show(kanji,name,big){ k.textContent=kanji; n.textContent=name; el.classList.toggle('big',!!big); el.classList.remove('show'); void el.offsetWidth; el.classList.add('show'); last=performance.now(); },
+           recent(){ return performance.now()-last<900; } }; })();
+const HINTS={dismantle:'Drag across the body to cut along that line. Tap for a quick slash.',cleave:'Tap a body part to carve it into chunks.',fuga:'Tap where the flame arrow should land.',grab:'Drag any piece around. Right-drag grabs in every mode.'};
+function setMode(m){ mode=m; document.querySelectorAll('.tech[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===m)); hud.hint.textContent=HINTS[m]; cv.style.cursor=m==='grab'?'grab':'crosshair'; }
+
+/* ================= input ================= */
+function toWorldPt(e){ const r=cv.getBoundingClientRect(); const x=(e.clientX-r.left)*DPR, y=(e.clientY-r.top)*DPR; return [(x-OX)/S,(y-OY)/S]; }
+function pickPiece(wx,wy){ const order=pieces.slice().sort((a,b)=>b.z-a.z||b.id-a.id); for (const p of order){ if (Math.hypot(p.x-wx,p.y-wy)>p.rad+1) continue; const [rx,ry]=toRest(p,wx,wy); if (pointInPoly(rx,ry,p.v)) return p; } return null; }
+cv.addEventListener('contextmenu',e=>e.preventDefault());
+cv.addEventListener('pointerdown',e=>{
+  if (!started) return; audioInit(); cv.setPointerCapture(e.pointerId);
+  const [x,y]=toWorldPt(e); pointerW=[x,y];
+  const m = e.button===2 ? 'grab' : mode;
+  if (m==='dismantle'){ drag={kind:'dismantle',x0:x,y0:y,x1:x,y1:y,moved:false}; }
+  else if (m==='cleave'){ const p=pickPiece(x,y); if (p) cleave(p); else { addSlashFx(x-30,y-30,x+30,y+30,2,'cleave'); sfx.slash(); } }
+  else if (m==='fuga'){ if (!arrow) fuga(x,y); }
+  else if (m==='grab'){ const p=pickPiece(x,y); if (p){ const [rx,ry]=toRest(p,x,y); grab={p,rx,ry,tx:x,ty:y}; drag={kind:'grab'}; cv.style.cursor='grabbing'; } }
+});
+cv.addEventListener('pointermove',e=>{
+  const [x,y]=toWorldPt(e); pointerW=[x,y];
+  if (!drag) return;
+  if (drag.kind==='dismantle'){ drag.x1=x; drag.y1=y; if (Math.hypot(x-drag.x0,y-drag.y0)>6) drag.moved=true; }
+  else if (drag.kind==='grab' && grab){ grab.tx=x; grab.ty=clamp(y,-600,-1); }
+});
+function endDrag(){
+  if (!drag) return;
+  if (drag.kind==='dismantle'){ if (drag.moved && Math.hypot(drag.x1-drag.x0,drag.y1-drag.y0)>12) dismantle(drag.x0,drag.y0,drag.x1,drag.y1); else quickDismantle(drag.x0,drag.y0); }
+  if (drag.kind==='grab'){ grab=null; cv.style.cursor=mode==='grab'?'grab':'crosshair'; }
+  drag=null;
+}
+cv.addEventListener('pointerup',endDrag); cv.addEventListener('pointercancel',()=>{ drag=null; grab=null; });
+
+document.querySelectorAll('.tech[data-mode]').forEach(b=>b.addEventListener('click',()=>setMode(b.dataset.mode)));
+$('domainBtn').addEventListener('click',()=>{ audioInit(); startDomain(); });
+function toggle(id,val){ $(id).setAttribute('aria-pressed',String(val)); }
+$('tXray').addEventListener('click',()=>{ xray=!xray; toggle('tXray',xray); });
+$('tSlow').addEventListener('click',()=>{ slowmo=!slowmo; toggle('tSlow',slowmo); });
+$('tSound').addEventListener('click',()=>{ muted=!muted; toggle('tSound',!muted); });
+$('tReset').addEventListener('click',()=>spawn());
+window.addEventListener('keydown',e=>{
+  if (!started) return;
+  const k=e.key.toLowerCase();
+  if (k==='1') setMode('dismantle'); else if (k==='2') setMode('cleave'); else if (k==='3') setMode('fuga');
+  else if (k==='4'){ audioInit(); startDomain(); } else if (k==='5') setMode('grab');
+  else if (k==='x') $('tXray').click(); else if (k==='t') $('tSlow').click(); else if (k==='m') $('tSound').click(); else if (k==='r') spawn();
+});
+let started=false;
+$('startBtn').addEventListener('click',()=>{ started=true; $('intro').hidden=true; audioInit(); });
+
+/* ================= boot ================= */
+buildTextures(); resize(); spawn(); setMode('dismantle');
+window.addEventListener('resize',resize);
+let last=performance.now(), acc=0; const perf={phys:0,game:0,render:0};
+function frame(now){
+  const dt=Math.min(0.05,(now-last)/1000); last=now;
+  const scale=(slowmo?0.3:1)*(state.hitstop>0?0.15:1); state.hitstop-=dt;
+  const sdt=dt*scale; acc+=sdt; let n=0;
+  while (acc>=DT && n<5){ physicsStep(DT); acc-=DT; n++; } if (n===5) acc=0;
+  const t1=performance.now(); updateGame(sdt); const t2=performance.now(); render(); updateHUD(); const t3=performance.now();
+  perf.phys=perf.phys*0.9+(t1-now)*0.1; perf.game=perf.game*0.9+(t2-t1)*0.1; perf.render=perf.render*0.9+(t3-t2)*0.1;
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+window.__shrine={ perf, get pieces(){ return pieces; }, state, slash, dismantle, cleave, fuga, startDomain, spawn, setMode, get xray(){ return xray; }, set xray(v){ xray=v; } };
+})();
+</script>
+</body>
+</html>
