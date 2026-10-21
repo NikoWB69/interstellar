@@ -113,7 +113,7 @@ button:focus-visible{outline:2px solid var(--ember);outline-offset:2px}
     <div class="brand"><span class="brand-k">伏魔御厨子</span><span class="brand-l">Malevolent Shrine</span></div>
     <div class="status-row"><span class="status" id="status">Alive</span><span class="reason" id="reason">Subject is standing</span></div>
     <div class="bar" title="Blood volume"><i id="bloodBar"></i></div>
-    <div class="stats"><span>Blood <b id="bloodTxt">100%</b></span><span>Cuts <b id="cutsTxt">0</b></span><span>Pieces <b id="piecesTxt">0</b></span></div>
+    <div class="stats"><span>Blood <b id="bloodTxt">100%</b></span><span>Pain <b id="painTxt">0%</b></span><span>Cuts <b id="cutsTxt">0</b></span><span>Pieces <b id="piecesTxt">0</b></span></div>
   </div>
   <div class="toggles">
     <button class="tog" id="tXray" aria-pressed="false" title="Show anatomy through the skin"><span class="lbl">X-ray</span><kbd>X</kbd></button>
@@ -550,7 +550,7 @@ function skinBase(c, poly, sil, x0, x1, open){
   rings(c, sil, open, [[2.6,'rgba(96,44,26,.14)'],[1.2,'rgba(96,44,26,.18)']]);
 }
 const SKIN = {
-  head(c, dead){
+  head(c){
     const P=SEG.head.poly; skinBase(c,P,P,-17,17,false);
     for (const s of [-1,1]){ ell(c,s*16.4,-336,2.9,5.2,0,'rgba(150,80,55,.5)'); ell(c,s*16.4,-336,1.3,3,0,'rgba(110,50,35,.45)'); }
     c.beginPath(); c.moveTo(-18,-336); c.quadraticCurveTo(-18,-362,0,-361.5); c.quadraticCurveTo(18,-362,18,-336);
@@ -560,21 +560,6 @@ const SKIN = {
     ell(c,-6.5,-326,3,1.6,0,'rgba(220,110,100,.18)'); ell(c,6.5,-326,3,1.6,0,'rgba(220,110,100,.18)');
     c.beginPath(); c.moveTo(0.6,-334); c.quadraticCurveTo(2.2,-328,1.6,-325.6); c.quadraticCurveTo(0,-324.6,-1.8,-325.4); c.lineWidth=0.7; c.strokeStyle='rgba(110,52,32,.55)'; c.stroke();
     dot(c,-1.2,-325.2,0.5,'rgba(70,30,20,.6)'); dot(c,1.2,-325.2,0.5,'rgba(70,30,20,.6)');
-    if (!dead){
-      ln(c,-10.5,-341,-3.4,-343.2,1.4,COL.hair); ln(c,10.5,-341,3.4,-343.2,1.4,COL.hair);
-      for (const s of [-1,1]){
-        ell(c,s*6.4,-336,3.7,2.5,0,'#f7f2ea'); dot(c,s*5.9,-335.8,1.7,'#3f2b1f'); dot(c,s*5.9,-335.8,0.8,'#080505'); dot(c,s*5.4,-336.5,0.45,'#fff');
-        c.beginPath(); c.ellipse(s*6.4,-336,3.8,2.6,0,Math.PI*1.05,Math.PI*1.95); c.lineWidth=0.6; c.strokeStyle='rgba(60,25,15,.8)'; c.stroke();
-      }
-      ell(c,0,-320.4,3.3,2.2,0,'#5a1a1e'); c.fillStyle='#f3ece2'; c.fillRect(-2.2,-322.4,4.4,0.9);
-    } else {
-      ln(c,-10.5,-341.6,-3.4,-341.6,1.3,COL.hair); ln(c,10.5,-341.6,3.4,-341.6,1.3,COL.hair);
-      for (const s of [-1,1]){
-        ell(c,s*6.4,-336,3.7,2.4,0,'rgba(120,60,45,.35)');
-        c.beginPath(); c.moveTo(s*2.8,-336); c.quadraticCurveTo(s*6.4,-334.4,s*10,-336); c.lineWidth=0.8; c.strokeStyle='rgba(50,20,12,.9)'; c.stroke();
-      }
-      ell(c,0,-320.2,3.4,1.2,0,'#4a1418');
-    }
   },
   neck(c){ const P=SEG.neck.poly; skinBase(c,P,P,-7.5,7.5,false); ell(c,0,-321,8,4,0,'rgba(80,35,20,.35)'); ell(c,0,-309,1.6,2.4,0,'rgba(255,225,205,.18)');
     for (const s of [-1,1]) ln(c,s*5.5,-318,s*1.5,-300,1.1,'rgba(96,44,26,.18)'); },
@@ -641,13 +626,13 @@ function buildTextures(){
       inner: makeTex(name, c => INNER[base](c,s)),
       skin: makeTex(name, c => SKIN[base](c,s)),
     };
-    if (name==='head') TEX[name].skinDead = makeTex(name, c => SKIN.head(c,true));
   }
 }
 
 /* ================= pieces & physics ================= */
 let pieces=[], joints=[], nextId=1, grab=null;
 const state = { alive:true, fallen:false, blood:100, cuts:0, reason:'Subject is standing', flail:0, t:0, standX:0, pelvisY:0,
+  pain:0, pendingPain:0, moanT:2, face:{pain:0,scream:0,fear:0,fade:0,tears:0,mouthBlood:0},
   heartComp:-1, hitstop:0, shake:0, knock:0 };
 
 function buildPaths(p){
@@ -690,7 +675,9 @@ function spawn(){
   }
   for (const j of JOINTS) joints.push({ a:map[j[0]], b:map[j[1]], jx:j[2], jy:j[3], lo:j[4], hi:j[5], flail:j[6], phase:Math.random()*TAU,
     side: sideOf(j[1]), kind: baseOf(j[1]) });
-  Object.assign(state, { alive:true, fallen:false, blood:100, cuts:0, reason:'Subject is standing', flail:0, hitstop:0, shake:0, knock:0, standX:0 });
+  Object.assign(state, { alive:true, fallen:false, blood:100, cuts:0, reason:'Subject is standing', flail:0, hitstop:0, shake:0, knock:0, standX:0,
+    pain:0, pendingPain:0, moanT:2, face:{pain:0,scream:0,fear:0,fade:0,tears:0,mouthBlood:0} });
+  voice.stop(true);
   state.pelvisY = map.pelvis.y;
   particles.length=0; fxs.length=0; queue.length=0; arrow=null;
   clearWorldLayers();
@@ -733,7 +720,7 @@ function cutPiece(p, wx, wy, dx, dy, push){
   for (const k of kids){
     const [x,y]=toWorld(p,k.cx,k.cy); k.x=x; k.y=y; k.a=p.a;
     const rx=x-p.x, ry=y-p.y; k.vx=p.vx-p.w*ry; k.vy=p.vy+p.w*rx; k.w=p.w;
-    k.fam=p.fam; k.char=p.char; k.burn=p.burn; k.bleed=1; k.glow=1;
+    k.fam=p.fam; k.comp=p.comp; k.char=p.char; k.burn=p.burn; k.bleed=1; k.glow=1;
     const side=Math.sign(dx*(y-wy)-dy*(x-wx)) || 1;
     const f=push*clamp(Math.sqrt(400/k.area),0.6,2.2);
     k.vx+=nx*side*f + dx*push*0.15; k.vy+=ny*side*f + dy*push*0.15;
@@ -754,6 +741,10 @@ function cutPiece(p, wx, wy, dx, dy, push){
     const lineDist=(pt)=>Math.abs(Dx*(pt[1]-Py)-Dy*(pt[0]-Px));
     if (p.seg==='head' && pointInPoly(BRAIN[0],BRAIN[1],p.v) && lineDist(BRAIN)<12) die('Brain split in two');
     else if (p.seg==='chest' && pointInPoly(HEART[0],HEART[1],p.v) && lineDist(HEART)<10) die('Heart cleaved');
+  }
+  if (state.alive && p.comp===state.heartComp){
+    state.pendingPain+=clamp(0.14+p.area/2500,0.14,0.55);
+    if (p.seg==='chest'||p.seg==='abdomen'||p.seg==='neck') state.face.mouthBlood=Math.min(1,state.face.mouthBlood+0.35);
   }
   state.cuts++;
   for (const k of kids) bloodBurst(k, 0.5);
@@ -777,7 +768,9 @@ function slash(x1,y1,x2,y2,opt={}){
   const before=joints.length;
   joints=joints.filter(j=>{
     if (opt.filter && !opt.filter(j.a) && !opt.filter(j.b)) return true;
-    const [jx,jy]=toWorld(j.a,j.jx,j.jy); return distToSeg(jx,jy,x1,y1,x2,y2) > 2.4;
+    const [jx,jy]=toWorld(j.a,j.jx,j.jy); const keep=distToSeg(jx,jy,x1,y1,x2,y2) > 2.4;
+    if (!keep && state.alive && j.a.comp===state.heartComp) state.pendingPain+=0.3;
+    return keep;
   });
   if (joints.length<before) hits++;
   markWorld(x1,y1,x2,y2,opt.faint);
@@ -786,6 +779,7 @@ function slash(x1,y1,x2,y2,opt={}){
     state.shake=Math.min(14,state.shake+(opt.faint?1.5:5)); if (!opt.faint) state.hitstop=0.05;
     computeComps(); updateVitals();
   }
+  const pp=state.pendingPain; state.pendingPain=0; if (pp>0) hurt(pp);
   return hits;
 }
 
@@ -799,7 +793,12 @@ function computeComps(){
 function pieceAt(seg, pt){ for (const p of pieces) if (p.seg===seg && pointInPoly(pt[0],pt[1],p.v)) return p; return null; }
 function die(reason){
   if (!state.alive) return; state.alive=false; state.fallen=true; state.reason=reason; state.flail=0;
-  sfx.thud();
+  sfx.thud(); voice.death(reason);
+}
+function hurt(a){
+  if (!state.alive) return;
+  state.pain=Math.min(1.4,state.pain+a); state.moanT=Math.max(state.moanT,1.2);
+  voice.hurtScream(clamp(a*1.3+state.pain*0.35,0.12,1));
 }
 function updateVitals(){
   const brain=pieceAt('head',BRAIN), heart=pieceAt('chest',HEART), pelvis=pieceAt('pelvis',PELVIS_PT);
@@ -997,7 +996,7 @@ function cleave(target){
 function fuga(tx,ty){
   const sx=-HW-40, sy=-420; const L=Math.hypot(tx-sx,ty-sy);
   arrow={x:sx,y:sy,tx,ty,ux:(tx-sx)/L,uy:(ty-sy)/L,sp:1500};
-  callout.show('開','Fuga'); sfx.fugaCharge();
+  callout.show('開','Fuga'); sfx.fugaCharge(); if (state.alive && !voice.busy()) voice.gasp();
 }
 function explode(x,y){
   const R=78;
@@ -1018,7 +1017,7 @@ function explode(x,y){
     if (p.comp===state.heartComp) hitBody=true;
     if (state.alive && (p===state.brainP || p===state.heartP) && f>0.35) die('Incinerated');
   }
-  if (hitBody && state.alive){ state.knock=1.5; state.fallen=true; state.reason='Knocked down'; state.flail=1.5; }
+  if (hitBody && state.alive){ state.knock=1.5; state.fallen=true; state.reason='Knocked down'; state.flail=1.5; hurt(0.9); }
   computeComps(); updateVitals();
 }
 function startDomain(){
@@ -1048,12 +1047,15 @@ function domainAmt(){ if (!domain) return 0; const t=domain.t; return clamp(Math
 
 /* ================= sound ================= */
 const AC=window.AudioContext||window.webkitAudioContext;
-let ac=null, master=null, noiseBuf=null, muted=false, lastSlash=0;
+let ac=null, master=null, analyser=null, noiseBuf=null, muted=false, lastSlash=0;
 function audioInit(){
   if (ac || !AC) return;
   try{
-    ac=new AC(); master=ac.createGain(); master.gain.value=0.5; master.connect(ac.destination);
+    ac=new AC(); master=ac.createGain(); master.gain.value=muted?0:0.5;
+    const comp=ac.createDynamicsCompressor(); comp.threshold.value=-14; comp.ratio.value=6; analyser=ac.createAnalyser(); analyser.fftSize=2048;
+    master.connect(comp); comp.connect(analyser); analyser.connect(ac.destination);
     const len=ac.sampleRate*1.5; noiseBuf=ac.createBuffer(1,len,ac.sampleRate); const d=noiseBuf.getChannelData(0); for (let i=0;i<len;i++) d[i]=Math.random()*2-1;
+    voice.init();
   }catch(e){ ac=null; }
 }
 function noise(dur,type,f0,f1,q,vol,att=0.003){
@@ -1077,6 +1079,90 @@ const sfx={
   fugaCharge(){ noise(0.45,'bandpass',400,2600,0.8,0.22,0.25); },
   boom(){ noise(1.5,'lowpass',1400,50,0.7,0.9,0.005); tone(1.1,'sine',95,28,0.55); },
   domain(){ tone(5.5,'sawtooth',55,51,0.16,0.8,320); tone(5.5,'sawtooth',55.6,51.5,0.13,0.8,320); tone(3.5,'sine',196,195,0.07,0.01); tone(3.8,'sine',293,292,0.045,0.01); noise(1.2,'bandpass',200,1800,2,0.15,0.6); },
+};
+
+/* ---- voice: a formant-synthesized throat for screams, sobs, groans and gasps ---- */
+const VOWELS={ ah:[850,1250,2800], eh:[650,1750,2700], oh:[480,850,2500], uh:[600,1050,2450], ee:[330,2100,2900] };
+const voice={
+  ready:false, env:null, lastHit:0,
+  init(){
+    if (this.ready || !ac) return;
+    const o=ac.createOscillator(); o.type='sawtooth'; o.frequency.value=180;
+    const vib=ac.createOscillator(); vib.frequency.value=5.8; const vibG=ac.createGain(); vibG.gain.value=0; vib.connect(vibG); vibG.connect(o.frequency);
+    const rough=ac.createOscillator(); rough.frequency.value=31; const roughG=ac.createGain(); roughG.gain.value=0; rough.connect(roughG); roughG.connect(o.frequency);
+    const nz=ac.createBufferSource(); nz.buffer=noiseBuf; nz.loop=true; const nzG=ac.createGain(); nzG.gain.value=0.2;
+    const voiced=ac.createGain(); voiced.gain.value=1; const pre=ac.createGain();
+    o.connect(voiced); voiced.connect(pre); nz.connect(nzG); nzG.connect(pre);
+    const sh=ac.createWaveShaper(); const curve=new Float32Array(1024); for (let i=0;i<1024;i++){ const x=i/511.5-1; curve[i]=Math.tanh(x*2.4); } sh.curve=curve; pre.connect(sh);
+    const out=ac.createGain(); out.gain.value=0;
+    const fs=[]; [[5,2.4],[7,1.7],[9,1.1]].forEach(([q,g],i)=>{ const f=ac.createBiquadFilter(); f.type='bandpass'; f.Q.value=q; f.frequency.value=VOWELS.ah[i]; const fg=ac.createGain(); fg.gain.value=g; sh.connect(f); f.connect(fg); fg.connect(out); fs.push(f); });
+    out.connect(master);
+    o.start(); vib.start(); rough.start(); nz.start();
+    Object.assign(this,{o,vibG,roughG,nzG,voiced,fs,out,ready:true});
+  },
+  now(){ return performance.now()/1000; },
+  weak(){ return clamp((state.blood-25)/75,0.15,1); },
+  utter(sp){
+    const att=sp.att||0.04, rel=sp.rel||0.25;
+    this.env={t0:this.now(), dur:sp.dur, att, rel, mouth:sp.mouth, pulses:sp.pulses||0, kind:sp.kind};
+    if (!this.ready) return;
+    const t=ac.currentTime, g=this.out.gain, f=this.o.frequency;
+    g.cancelScheduledValues(t); g.setValueAtTime(Math.max(0.0001,g.value),t);
+    if (sp.pulses){
+      const per=sp.dur/sp.pulses;
+      for (let i=0;i<sp.pulses;i++){ const a=t+i*per; g.linearRampToValueAtTime(sp.vol,a+per*0.25); g.linearRampToValueAtTime(sp.vol*0.05,a+per*0.9); }
+      g.linearRampToValueAtTime(0,t+sp.dur+0.1);
+    } else {
+      g.linearRampToValueAtTime(sp.vol,t+att); g.linearRampToValueAtTime(sp.vol*0.8,t+sp.dur); g.linearRampToValueAtTime(0,t+sp.dur+rel);
+    }
+    f.cancelScheduledValues(t); f.setValueAtTime(sp.f0*0.75,t); f.exponentialRampToValueAtTime(sp.f0,t+0.08);
+    f.exponentialRampToValueAtTime(sp.f0*1.06,t+Math.max(0.1,sp.dur*0.55)); f.exponentialRampToValueAtTime(sp.f1,t+sp.dur+rel);
+    this.vibG.gain.setTargetAtTime(sp.f0*(sp.vib??0.035),t,0.05);
+    this.roughG.gain.setTargetAtTime(sp.f0*(sp.rough??0.05),t,0.05);
+    this.nzG.gain.setTargetAtTime(sp.breath,t,0.02);
+    this.voiced.gain.setTargetAtTime(sp.voicing??1,t,0.02);
+    const v1=VOWELS[sp.vowel], v2=VOWELS[sp.vowel2||sp.vowel];
+    this.fs.forEach((fl,i)=>{ fl.frequency.cancelScheduledValues(t); fl.frequency.setTargetAtTime(v1[i],t,0.03); fl.frequency.setTargetAtTime(v2[i],t+sp.dur*0.6,0.15); });
+  },
+  scream(I){
+    I=clamp(I,0.15,1); const w=this.weak();
+    const f0=(230+300*I)*(0.7+0.3*w)*rnd(0.94,1.06);
+    this.utter({kind:'scream',f0,f1:f0*0.6,dur:(0.4+1.4*I)*(0.6+0.4*w),vol:(0.35+0.4*I)*(0.4+0.6*w),vowel:I>0.6?'eh':'ah',vowel2:'ah',
+      breath:0.25+0.5*(1-w),rough:0.04+0.08*I,mouth:0.55+0.45*I});
+  },
+  yelp(){ const f0=rnd(380,460)*(0.75+0.25*this.weak()); this.utter({kind:'scream',f0,f1:f0*0.7,dur:0.22,vol:0.45,vowel:'ah',breath:0.2,rough:0.05,att:0.02,rel:0.12,mouth:0.7}); },
+  groan(){ const w=this.weak(); this.utter({kind:'groan',f0:rnd(110,140)*(0.8+0.2*w),f1:90,dur:rnd(0.9,1.5),vol:0.3*(0.5+0.5*w),vowel:'oh',vowel2:'uh',breath:0.35,rough:0.06,vib:0.02,att:0.15,rel:0.4,mouth:0.3}); },
+  sob(){ this.utter({kind:'sob',f0:rnd(240,290),f1:200,dur:rnd(0.9,1.3),vol:0.3,vowel:'uh',vowel2:'oh',breath:0.6,rough:0.03,pulses:3+((Math.random()*2)|0),mouth:0.45}); },
+  whimper(){ this.utter({kind:'whimper',f0:rnd(420,520),f1:300,dur:0.6,vol:0.2,vowel:'ee',vowel2:'uh',breath:0.5,rough:0.02,att:0.06,rel:0.2,mouth:0.3}); },
+  gasp(){ this.utter({kind:'gasp',f0:300,f1:250,dur:0.28,vol:0.3,vowel:'ah',breath:1,voicing:0.08,att:0.05,rel:0.12,mouth:0.6}); },
+  ambient(){
+    const p=state.pain, w=this.weak();
+    if (w<0.45){ Math.random()<0.6 ? this.groan() : this.gasp(); return; }
+    if (p>0.75) this.scream(rnd(0.45,0.8));
+    else if (p>0.45) Math.random()<0.5 ? this.sob() : this.scream(rnd(0.25,0.45));
+    else Math.random()<0.5 ? this.groan() : this.whimper();
+  },
+  busy(){ const e=this.env; return !!e && this.now() < e.t0+e.dur+e.rel; },
+  hurtScream(I){
+    const n=this.now();
+    if (this.busy() && this.env.kind==='scream' && n-this.lastHit<0.35){ this.env.dur=Math.min(this.env.dur+0.15, n-this.env.t0+1.6); return; }
+    this.lastHit=n;
+    if (I<0.22 && !this.busy()) this.yelp(); else this.scream(this.busy()&&this.env.kind==='scream' ? Math.min(1,I+0.15) : I);
+  },
+  stop(abrupt){
+    this.env=null; if (!this.ready) return;
+    const t=ac.currentTime, g=this.out.gain; g.cancelScheduledValues(t); g.setValueAtTime(g.value,t); g.linearRampToValueAtTime(0,t+(abrupt?0.025:0.3));
+  },
+  death(reason){
+    if (/Decap|Brain|Torso|Vital|Incin/.test(reason)) this.stop(true);
+    else this.utter({kind:'rattle',f0:150,f1:70,dur:0.9,vol:0.22,vowel:'uh',vowel2:'oh',breath:0.8,voicing:0.5,rough:0.15,att:0.05,rel:0.6,mouth:0.35});
+  },
+  mouth(){
+    const e=this.env; if (!e) return 0; const t=this.now()-e.t0; let a;
+    if (t<e.att) a=t/e.att; else if (t<e.dur) a=1-0.2*(t-e.att)/Math.max(0.01,e.dur-e.att); else if (t<e.dur+e.rel) a=0.8*(1-(t-e.dur)/e.rel); else return 0;
+    if (e.pulses){ const per=e.dur/e.pulses, ph=(t%per)/per; a*= ph<0.25 ? ph/0.25 : Math.max(0.05,1-(ph-0.25)/0.65); }
+    return a*e.mouth;
+  },
 };
 
 /* ================= rendering ================= */
@@ -1140,16 +1226,104 @@ function drawShrine(c){
   }
 }
 
+/* ---- live face: driven by pain, fear, screaming and blood loss ---- */
+function lookDir(p){
+  if (!pointerW) return [0,0];
+  const [rx,ry]=toRest(p,pointerW[0],pointerW[1]); const dx=rx, dy=ry+336, d=Math.hypot(dx,dy)||1, k=Math.min(1.1,d/30);
+  return [dx/d*k, dy/d*k*0.6];
+}
+function drawFace(c,p){
+  const F=state.face, t=state.t, alive=state.alive;
+  const P=alive?clamp(F.pain,0,1):0, M=alive?F.scream:0, R=alive?F.fear*(1-P*0.7):0, D=alive?F.fade:1;
+  const trem=alive?(P*0.28+M*0.18):0;
+  c.save(); c.translate((Math.random()-0.5)*trem,(Math.random()-0.5)*trem);
+  if (alive && P>0.05) ell(c,0,-344,13,6,0,`rgba(200,40,40,${0.16*P})`);
+  const open = alive ? clamp((1+R*0.3)*(1-P*0.62)*(1-M*0.55)*(1-D*0.5),0.03,1.3) : 0.28;
+  const look = alive ? lookDir(p) : [0,0.6];
+  for (const s of [-1,1]){
+    const ex=s*6.4, ey=-336;
+    ell(c,ex,ey+0.3,4.6,3.4,0,`rgba(90,38,28,${0.12+0.22*P+0.3*D})`);
+    if (open>0.16){
+      const up=2.6*open, lo=Math.min(2.1,1.6*open+0.5);
+      c.save();
+      c.beginPath(); c.moveTo(ex-3.9,ey); c.quadraticCurveTo(ex,ey-up*2,ex+3.9,ey); c.quadraticCurveTo(ex,ey+lo*2,ex-3.9,ey); c.closePath();
+      c.fillStyle = alive ? (P>0.4?'#f1dcd2':'#f7f2ea') : '#e2d9cf'; c.fill(); c.clip();
+      if (alive && P>0.35) for (let k=0;k<3;k++) ln(c,ex+s*3.8,ey+(k-1)*0.6,ex+s*1.8,ey+(k-1)*0.9,0.18,'rgba(200,40,40,.6)');
+      const ix=ex+look[0]-s*0.2, iy=ey+look[1];
+      dot(c,ix,iy,1.75-R*0.2,alive?'#3f2b1f':'#5a4a40');
+      dot(c,ix,iy,alive?0.65+0.55*P-0.25*R:1.1,'#080505');
+      if (alive) dot(c,ix-0.5,iy-0.6,0.42,'#fff');
+      c.restore();
+      c.beginPath(); c.moveTo(ex-3.9,ey); c.quadraticCurveTo(ex,ey-up*2,ex+3.9,ey); c.lineWidth=0.75; c.strokeStyle='rgba(55,22,14,.9)'; c.stroke();
+      if (P>0.3){ c.beginPath(); c.moveTo(ex-3,ey+lo+0.6); c.quadraticCurveTo(ex,ey+lo+1.6,ex+3,ey+lo+0.6); c.lineWidth=0.4; c.strokeStyle=`rgba(96,44,26,${P*0.5})`; c.stroke(); }
+    } else {
+      c.beginPath(); c.moveTo(ex-3.8,ey-0.2); c.quadraticCurveTo(ex,ey+1.1,ex+3.8,ey-0.2); c.lineWidth=0.9; c.strokeStyle='rgba(50,20,12,.95)'; c.stroke();
+      for (let k=-1;k<=1;k++) ln(c,ex+s*4.3,ey+k*0.9,ex+s*6,ey+k*1.7,0.35,'rgba(96,44,26,.6)');
+      c.beginPath(); c.moveTo(ex-3,ey+1.6); c.quadraticCurveTo(ex,ey+2.6,ex+3,ey+1.6); c.lineWidth=0.4; c.strokeStyle='rgba(96,44,26,.5)'; c.stroke();
+    }
+    if (F.tears>0.02){
+      const L=2+F.tears*12;
+      c.beginPath(); c.moveTo(ex-s*1.5,ey+1.8); c.quadraticCurveTo(ex-s*1.0+Math.sin(t*0.7+s)*0.4,ey+1.8+L*0.5,ex-s*1.6,ey+1.8+L);
+      c.lineWidth=0.7; c.strokeStyle='rgba(200,225,255,.55)'; c.stroke(); dot(c,ex-s*1.6,ey+1.9+L,0.55,'rgba(220,240,255,.75)');
+    }
+  }
+  // brows: worried (inner ends up) at low pain or fear, knitted and lowered at high pain
+  const worry = alive ? Math.max(R, P<0.35 ? P/0.35 : Math.max(0,1-(P-0.35)/0.3))*(1-D*0.5) : 0;
+  const knit = alive ? clamp((P-0.3)/0.5,0,1) : 0;
+  for (const s of [-1,1]){
+    const ix=s*(3.3-0.9*knit), iy=-343.2-1.8*worry+2.6*knit, ox=s*10.6, oy=-341.3-0.7*R+0.9*knit-0.4*worry;
+    c.beginPath(); c.moveTo(ox,oy); c.quadraticCurveTo(s*7,Math.min(iy,oy)-0.9+0.5*knit,ix,iy); c.lineWidth=1.45; c.strokeStyle=COL.hair; c.lineCap='round'; c.stroke();
+  }
+  if (knit>0.1){ ln(c,-0.9,-344.6,-0.6,-341.2,0.35,`rgba(96,44,26,${knit*0.7})`); ln(c,0.9,-344.6,0.6,-341.2,0.35,`rgba(96,44,26,${knit*0.7})`); }
+  if (worry>0.2) for (const y of [-348.2,-350.2]){ c.beginPath(); c.moveTo(-6,y+0.8); c.quadraticCurveTo(0,y-0.6*worry,6,y+0.8); c.lineWidth=0.35; c.strokeStyle=`rgba(96,44,26,${worry*0.4})`; c.stroke(); }
+  if (P>0.45){ const a=(P-0.45)*1.2; ln(c,-1.6,-331,-0.4,-330.2,0.35,`rgba(96,44,26,${a})`); ln(c,1.6,-331,0.4,-330.2,0.35,`rgba(96,44,26,${a})`); }
+  const fold = alive ? 0.15+0.45*Math.max(P,M) : 0.1;
+  const mw = alive ? 3.2+1.7*P+1.6*M : 3.4;
+  for (const s of [-1,1]){ c.beginPath(); c.moveTo(s*2.9,-326.2); c.quadraticCurveTo(s*(mw+1.8),-323.5,s*(mw+0.9),-319.8); c.lineWidth=0.5; c.strokeStyle=`rgba(96,44,26,${fold})`; c.stroke(); }
+  // mouth: pressed lips -> clenched-teeth grimace -> wide open scream
+  const mo = alive ? Math.max(M*4.6, P*1.1+Math.max(0,P-0.5)*0.8) : 1.3;
+  const grim = alive ? clamp(P*1.4-M,0,1) : 0;
+  const cy=-320.6, top=cy-0.3-mo*0.35, bot=cy+0.4+mo*0.95;
+  if (mo<0.45 && grim<0.25){
+    c.beginPath(); c.moveTo(-mw,cy+0.4*P); c.quadraticCurveTo(0,cy-0.5+0.6*P,mw,cy+0.4*P); c.lineWidth=0.85; c.strokeStyle='#6e2a26'; c.stroke();
+    ell(c,0,cy+1.2,mw*0.55,0.6,0,'rgba(200,110,100,.35)');
+  } else {
+    const cornerY=cy+0.2+grim*0.5-M*0.3, b=bot+0.6*M;
+    const mouthPath=()=>{ c.beginPath(); c.moveTo(-mw,cornerY); c.bezierCurveTo(-mw*0.6,top-0.2,mw*0.6,top-0.2,mw,cornerY); c.bezierCurveTo(mw*0.75,b,-mw*0.75,b,-mw,cornerY); c.closePath(); };
+    mouthPath(); c.fillStyle='#2a0508'; c.fill();
+    c.save(); mouthPath(); c.clip();
+    ell(c,0,(top+bot)/2+0.6,mw*0.5,Math.max(0.3,(bot-top)*0.3),0,'#4a0b10');
+    c.fillStyle='#f2ebe0'; c.fillRect(-mw*0.78,top-0.6,mw*1.56,1.2+grim*0.5); c.fillRect(-mw*0.7,bot-1.1-grim*0.4,mw*1.4,1.1+grim*0.4);
+    for (let i=-3;i<=3;i++){ ln(c,i*mw*0.22,top-0.6,i*mw*0.22,top+0.6+grim*0.5,0.18,'rgba(120,100,90,.7)'); ln(c,i*mw*0.2,bot-1.1-grim*0.4,i*mw*0.2,bot,0.18,'rgba(120,100,90,.7)'); }
+    if (mo>1.5) ell(c,0,bot-0.4,mw*0.5,Math.min(1.6,mo*0.25),0,'#c4646c');
+    c.restore();
+    mouthPath(); c.lineWidth=0.75; c.strokeStyle='#7a3330'; c.stroke();
+  }
+  if (F.mouthBlood>0.02){ const L=F.mouthBlood*14, sx=mw*0.6; c.beginPath(); c.moveTo(sx,cy+0.8); c.quadraticCurveTo(sx+0.8,cy+L*0.5,sx+0.3,cy+L); c.lineWidth=1.1; c.strokeStyle='rgba(120,0,12,.85)'; c.stroke(); dot(c,sx+0.3,cy+L,0.8,'rgba(120,0,12,.9)'); }
+  c.restore();
+}
+function updateFace(dt){
+  const F=state.face;
+  F.pain+=((state.alive?clamp(state.pain,0,1):0)-F.pain)*Math.min(1,dt*7);
+  F.scream=state.alive ? voice.mouth()*(0.9+0.1*Math.sin(state.t*38)) : 0;
+  const fearOn=state.alive && ((drag && drag.kind==='dismantle' && drag.moved) || !!arrow || (domain && domain.t<1.4) || !!grab);
+  F.fear+=((fearOn?1:0)-F.fear)*Math.min(1,dt*6);
+  F.fade=clamp((65-state.blood)/40,0,1);
+  if (state.alive && F.pain>0.4) F.tears=Math.min(1,F.tears+dt*0.12);
+}
+
 function drawPiece(p){
   const T=TEX[p.seg];
   ctx.save(); ctx.translate(OX+p.x*S, OY+p.y*S); ctx.rotate(p.a); ctx.scale(S,S); ctx.translate(-p.cx,-p.cy);
   ctx.save(); ctx.clip(p.body);
-  const skin=(p.seg==='head' && !state.alive) ? T.skinDead : T.skin;
+  const skin=T.skin;
   if (xray){
     ctx.drawImage(T.inner.cnv,T.inner.x0,T.inner.y0,T.inner.w,T.inner.h);
     ctx.globalAlpha=0.2; ctx.drawImage(skin.cnv,skin.x0,skin.y0,skin.w,skin.h); ctx.globalAlpha=1;
   } else {
     ctx.drawImage(skin.cnv,skin.x0,skin.y0,skin.w,skin.h);
+    if (p.seg==='head') drawFace(ctx,p);
+    const pal=clamp((100-state.blood)/70,0,1)*0.38; if (pal>0.01){ ctx.fillStyle=`rgba(150,172,185,${pal})`; ctx.fill(p.body); }
     if (p.hasCut){ ctx.save(); ctx.clip(p.band); ctx.drawImage(T.inner.cnv,T.inner.x0,T.inner.y0,T.inner.w,T.inner.h); ctx.restore(); }
   }
   if (p.char>0.01){ ctx.fillStyle=`rgba(24,10,5,${p.char*0.82})`; ctx.fill(p.body); }
@@ -1234,6 +1408,11 @@ function updateGame(dt){
   state.shake*=Math.exp(-dt*9); if (state.shake<0.05) state.shake=0;
   state.flail*=Math.exp(-dt*1.4);
   if (state.knock>0) state.knock-=dt;
+  if (state.alive){
+    state.pain=Math.max(state.fallen?0.25:0, state.pain-dt*0.06);
+    state.moanT-=dt;
+    if (state.pain>0.18 && state.moanT<=0 && !voice.busy()){ voice.ambient(); state.moanT=rnd(1.4,3.5)*(1.3-Math.min(1,state.pain)*0.6); }
+  }
   for (let i=queue.length-1;i>=0;i--){ queue[i].t-=dt; if (queue[i].t<=0){ const q=queue.splice(i,1)[0]; q.fn(); } }
   computeComps(); updateVitals();
   for (const p of pieces){
@@ -1241,6 +1420,7 @@ function updateGame(dt){
     emitBleed(p,dt,state.alive && p.comp===state.heartComp);
     if (p.burn>0){
       p.burn-=dt; p.char=Math.min(1,p.char+dt*0.12);
+      if (state.alive && p.comp===state.heartComp) state.pain=Math.min(1.4,state.pain+dt*0.35);
       if (Math.random()<dt*Math.min(40,p.area*0.08)){ const v=p.v[(Math.random()*p.v.length)|0]; const [x,y]=toWorld(p,v[0],v[1]); addP({k:2,x,y,vx:rnd(-15,15),vy:rnd(-90,-30),life:rnd(0.3,0.7),r:rnd(1.5,3.5)}); if (Math.random()<0.3) addP({k:3,x,y,vx:rnd(-10,10),vy:rnd(-50,-20),life:rnd(0.8,1.6),r:rnd(3,7)}); }
     }
   }
@@ -1264,17 +1444,22 @@ function updateGame(dt){
     if (d<=step){ const a=arrow; arrow=null; explode(a.tx,a.ty); } else { arrow.x+=arrow.ux*step; arrow.y+=arrow.uy*step; }
   }
   updateDomain(dt);
+  updateFace(dt);
 }
 
 /* ================= HUD ================= */
 const $=id=>document.getElementById(id);
-const hud={status:$('status'),reason:$('reason'),bar:$('bloodBar'),blood:$('bloodTxt'),cuts:$('cutsTxt'),pieces:$('piecesTxt'),cd:$('domainCd'),domainBtn:$('domainBtn'),hint:$('hint')};
+const hud={pain:$('painTxt'),status:$('status'),reason:$('reason'),bar:$('bloodBar'),blood:$('bloodTxt'),cuts:$('cutsTxt'),pieces:$('piecesTxt'),cd:$('domainCd'),domainBtn:$('domainBtn'),hint:$('hint')};
 const hudCache={};
 function setText(el,key,v){ if (hudCache[key]!==v){ hudCache[key]=v; el.textContent=v; } }
 function updateHUD(){
   const st=state.alive?(state.fallen?'Down':'Alive'):'Dead';
   setText(hud.status,'st',st); hud.status.className='status'+(st==='Dead'?' dead':st==='Down'?' down':'');
-  setText(hud.reason,'re',state.alive && state.fallen ? 'Down, still breathing' : state.reason);
+  let re=state.reason;
+  if (state.alive){ const pn=state.pain;
+    re = state.blood<55 ? 'Going into shock' : state.face.scream>0.5 ? 'Screaming' : pn>0.75 ? 'In agony' : pn>0.4 ? 'Badly hurt' : pn>0.12 ? 'Hurt' : state.fallen ? 'Down, still breathing' : 'Subject is standing'; }
+  setText(hud.reason,'re',re);
+  setText(hud.pain,'pn',(state.alive?Math.round(clamp(state.pain,0,1)*100):0)+'%');
   const b=Math.round(state.blood); setText(hud.blood,'bl',b+'%'); hud.bar.style.transform=`scaleX(${state.blood/100})`;
   setText(hud.cuts,'cu',String(state.cuts)); setText(hud.pieces,'pi',String(pieces.length));
   const cdk = domain ? 1 : domainCd/DOMAIN_CD; hud.cd.style.transform=`scaleX(${cdk})`;
@@ -1302,7 +1487,7 @@ cv.addEventListener('pointerdown',e=>{
 cv.addEventListener('pointermove',e=>{
   const [x,y]=toWorldPt(e); pointerW=[x,y];
   if (!drag) return;
-  if (drag.kind==='dismantle'){ drag.x1=x; drag.y1=y; if (Math.hypot(x-drag.x0,y-drag.y0)>6) drag.moved=true; }
+  if (drag.kind==='dismantle'){ drag.x1=x; drag.y1=y; if (!drag.moved && Math.hypot(x-drag.x0,y-drag.y0)>6){ drag.moved=true; if (state.alive && !voice.busy() && Math.random()<0.6) voice.gasp(); } }
   else if (drag.kind==='grab' && grab){ grab.tx=x; grab.ty=clamp(y,-600,-1); }
 });
 function endDrag(){
@@ -1318,7 +1503,7 @@ $('domainBtn').addEventListener('click',()=>{ audioInit(); startDomain(); });
 function toggle(id,val){ $(id).setAttribute('aria-pressed',String(val)); }
 $('tXray').addEventListener('click',()=>{ xray=!xray; toggle('tXray',xray); });
 $('tSlow').addEventListener('click',()=>{ slowmo=!slowmo; toggle('tSlow',slowmo); });
-$('tSound').addEventListener('click',()=>{ muted=!muted; toggle('tSound',!muted); });
+$('tSound').addEventListener('click',()=>{ muted=!muted; toggle('tSound',!muted); if (master) master.gain.value=muted?0:0.5; });
 $('tReset').addEventListener('click',()=>spawn());
 window.addEventListener('keydown',e=>{
   if (!started) return;
@@ -1344,7 +1529,7 @@ function frame(now){
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-window.__shrine={ perf, get pieces(){ return pieces; }, state, slash, dismantle, cleave, fuga, startDomain, spawn, setMode, get xray(){ return xray; }, set xray(v){ xray=v; } };
+window.__shrine={ perf, voice, hurt, get analyser(){ return analyser; }, audioInit, get pieces(){ return pieces; }, state, slash, dismantle, cleave, fuga, startDomain, spawn, setMode, get xray(){ return xray; }, set xray(v){ xray=v; } };
 })();
 </script>
 </body>
