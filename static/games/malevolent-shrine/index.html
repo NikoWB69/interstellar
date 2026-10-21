@@ -63,6 +63,16 @@ button:focus-visible{outline:2px solid var(--ember);outline-offset:2px}
 .tech .cd{position:absolute;inset:0;background:rgba(5,2,3,.72);transform-origin:left;transform:scaleX(0);pointer-events:none}
 .tech[disabled]{cursor:not-allowed}
 
+.panel{position:fixed;top:calc(env(safe-area-inset-top,0px) + 56px);right:max(16px,env(safe-area-inset-right,0px));width:min(340px,calc(100vw - 32px));
+  background:rgba(16,10,11,.95);border:1px solid rgba(234,223,207,.18);padding:14px;display:grid;gap:14px;z-index:5}
+.prow{display:grid;gap:7px}
+.plabel{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ash);display:flex;justify-content:space-between}
+.plabel b{color:var(--bone);font-family:var(--f-mono);font-weight:500;letter-spacing:0}
+.seg{display:flex;flex-wrap:wrap;gap:4px}
+.seg button{flex:1 1 auto;background:rgba(234,223,207,.05);border:1px solid rgba(234,223,207,.14);padding:7px 8px;font-size:12px;cursor:pointer}
+.seg button[aria-pressed="true"]{border-color:var(--blood);background:rgba(86,7,17,.75);color:#fff}
+.pdesc{margin:0;font-size:12px;line-height:1.5;color:#b8aa9d}
+input[type=range]{width:100%;accent-color:var(--blood)}
 .hint{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 96px);font-size:12px;color:var(--ash);
   letter-spacing:.04em;pointer-events:none;text-align:center;width:min(92vw,560px);text-shadow:0 1px 4px #000}
 
@@ -119,18 +129,39 @@ button:focus-visible{outline:2px solid var(--ember);outline-offset:2px}
     <button class="tog" id="tXray" aria-pressed="false" title="Show anatomy through the skin"><span class="lbl">X-ray</span><kbd>X</kbd></button>
     <button class="tog" id="tSlow" aria-pressed="false" title="Slow motion"><span class="lbl">Slow-mo</span><kbd>T</kbd></button>
     <button class="tog" id="tSound" aria-pressed="true" title="Sound"><span class="lbl">Sound</span><kbd>M</kbd></button>
+    <button class="tog" id="tSettings" aria-expanded="false" aria-controls="panel" title="Subject and power"><span class="lbl">Subject &amp; power</span><kbd>S</kbd></button>
     <button class="tog" id="tReset" title="New subject"><span class="lbl">New subject</span><kbd>R</kbd></button>
   </div>
 </header>
 
 <nav class="techniques" aria-label="Techniques">
-  <button class="tech active" data-mode="dismantle"><span class="k">解</span><span class="n">Dismantle</span><span class="d">Drag to cut a line</span><kbd>1</kbd></button>
+  <button class="tech active" data-mode="dismantle"><span class="k">解</span><span class="n">Dismantle</span><span class="d">Cut along your drag</span><kbd>1</kbd></button>
   <button class="tech" data-mode="cleave"><span class="k">捌</span><span class="n">Cleave</span><span class="d">Tap a part to carve it</span><kbd>2</kbd></button>
   <button class="tech" data-mode="fuga"><span class="k">開</span><span class="n">Fuga</span><span class="d">Flame arrow</span><kbd>3</kbd></button>
   <button class="tech domain" id="domainBtn"><span class="k">領域</span><span class="n">Domain</span><span class="d">Malevolent Shrine</span><kbd>4</kbd><span class="cd" id="domainCd"></span></button>
   <button class="tech" data-mode="grab"><span class="k">掴</span><span class="n">Grab</span><span class="d">Drag the pieces</span><kbd>5</kbd></button>
 </nav>
 <div class="hint" id="hint"></div>
+<section class="panel" id="panel" hidden aria-label="Subject and power">
+  <div class="prow">
+    <span class="plabel">Subject</span>
+    <div class="seg" id="segSubject" role="group" aria-label="Subject">
+      <button data-v="frail">Frail</button><button data-v="average">Average</button><button data-v="athlete">Athlete</button><button data-v="sorcerer">Sorcerer</button>
+    </div>
+    <p class="pdesc" id="subjectDesc"></p>
+  </div>
+  <div class="prow">
+    <label class="plabel" for="powRange">Dismantle power <b id="powTxt">100%</b></label>
+    <input type="range" id="powRange" min="10" max="150" step="5" value="100">
+    <p class="pdesc">Below what a body part can take, a slash leaves a gash instead of cutting through. Repeated gashes weaken the part. Cleave always cuts through.</p>
+  </div>
+  <div class="prow">
+    <span class="plabel">Blade</span>
+    <div class="seg" id="segBlade" role="group" aria-label="Blade">
+      <button data-v="live">Follows cursor</button><button data-v="release">Cut on release</button>
+    </div>
+  </div>
+</section>
 <div id="callout"><div class="ck"></div><div class="cn"></div></div>
 
 <div class="intro" id="intro">
@@ -139,11 +170,12 @@ button:focus-visible{outline:2px solid var(--ember);outline-offset:2px}
     <div class="sub">Malevolent Shrine</div>
     <p>A test subject with full human anatomy stands in your domain: skin, fat, muscle, bone, and every major organ. Every cut slices through the real layers, so you see ribs, lungs, heart, gut and marrow in cross-section.</p>
     <dl class="ctl">
-      <dt>解</dt><dd><b>Dismantle.</b> Drag a line across the body. Tap for a quick slash.</dd>
+      <dt>解</dt><dd><b>Dismantle.</b> Drag across the body. The cut follows your cursor exactly. Tap for a small nick.</dd>
       <dt>捌</dt><dd><b>Cleave.</b> Tap a body part and it gets carved into chunks.</dd>
       <dt>開</dt><dd><b>Fuga.</b> Tap to fire a flame arrow that burns and blasts.</dd>
       <dt>領域</dt><dd><b>Domain Expansion.</b> Press 4 for four seconds of nonstop slashes.</dd>
       <dt>掴</dt><dd><b>Grab.</b> Drag pieces around. Right-drag grabs in any mode.</dd>
+      <dt>設</dt><dd><b>Subject &amp; power</b> (S). Pick a tougher or frailer subject and weaken Dismantle.</dd>
     </dl>
     <button class="start" id="startBtn">Open the domain</button>
     <div class="note">Contains cartoon gore and anatomical cross-sections. X toggles an X-ray view of the anatomy.</div>
@@ -658,7 +690,7 @@ function buildPaths(p){
 function makePiece(seg, verts, cuts){
   const pr=polyProps(verts); if (!pr || pr.area<0.6) return null;
   const p={ id:nextId++, seg, z:SEG[seg].z, v:verts, c:cuts, cx:pr.cx, cy:pr.cy, area:pr.area, m:pr.area*DENS, I:pr.I*DENS,
-    x:0,y:0,a:0,vx:0,vy:0,w:0, fam:0, char:0, burn:0, bleed:0, glow:0, comp:0, _i:0 };
+    x:0,y:0,a:0,vx:0,vy:0,w:0, fam:0, char:0, burn:0, bleed:0, glow:0, comp:0, _i:0, damage:0, wounds:[] };
   p.im=1/p.m; p.iI=1/p.I;
   let r=0; for (const [x,y] of verts) r=Math.max(r,Math.hypot(x-p.cx,y-p.cy)); p.rad=r;
   buildPaths(p); return p;
@@ -720,7 +752,7 @@ function cutPiece(p, wx, wy, dx, dy, push){
   for (const k of kids){
     const [x,y]=toWorld(p,k.cx,k.cy); k.x=x; k.y=y; k.a=p.a;
     const rx=x-p.x, ry=y-p.y; k.vx=p.vx-p.w*ry; k.vy=p.vy+p.w*rx; k.w=p.w;
-    k.fam=p.fam; k.comp=p.comp; k.char=p.char; k.burn=p.burn; k.bleed=1; k.glow=1;
+    k.fam=p.fam; k.comp=p.comp; k.damage=p.damage; k.wounds=p.wounds.slice(); k.char=p.char; k.burn=p.burn; k.bleed=1; k.glow=1;
     const side=Math.sign(dx*(y-wy)-dy*(x-wx)) || 1;
     const f=push*clamp(Math.sqrt(400/k.area),0.6,2.2);
     k.vx+=nx*side*f + dx*push*0.15; k.vy+=ny*side*f + dy*push*0.15;
@@ -755,32 +787,109 @@ function segHitsPiece(p,x1,y1,x2,y2){
   for (let i=0;i<wv.length;i++){ const a=wv[i], b=wv[(i+1)%wv.length]; if (segsCross(x1,y1,x2,y2,a[0],a[1],b[0],b[1])) return true; }
   return pointInPoly(x1,y1,wv) || pointInPoly(x2,y2,wv);
 }
-function slash(x1,y1,x2,y2,opt={}){
-  const L=Math.hypot(x2-x1,y2-y1); if (L<1) return 0;
-  const dx=(x2-x1)/L, dy=(y2-y1)/L, push=opt.push??45;
-  let hits=0;
+function segT(ax,ay,bx,by,cx,cy,dx,dy){
+  const d=(bx-ax)*(dy-cy)-(by-ay)*(dx-cx); if (Math.abs(d)<1e-9) return -1;
+  const t=((cx-ax)*(dy-cy)-(cy-ay)*(dx-cx))/d, u=((cx-ax)*(by-ay)-(cy-ay)*(bx-ax))/d;
+  return (t>=0&&t<=1&&u>=0&&u<=1) ? t : -1;
+}
+// Where a polyline goes inside a polygon: list of spans, each with whether it entered from outside and exited again.
+function pathSpans(path, wv){
+  const spans=[]; let inside=pointInPoly(path[0][0],path[0][1],wv), cur=inside?{pts:[path[0]],entered:false,exited:false}:null;
+  for (let k=0;k<path.length-1;k++){
+    const [ax,ay]=path[k], [bx,by]=path[k+1], hits=[];
+    for (let i=0;i<wv.length;i++){ const a=wv[i], b=wv[(i+1)%wv.length]; const t=segT(ax,ay,bx,by,a[0],a[1],b[0],b[1]); if (t>=0) hits.push(t); }
+    hits.sort((a,b)=>a-b);
+    for (const t of hits){
+      const pt=[ax+(bx-ax)*t, ay+(by-ay)*t];
+      if (inside){ cur.pts.push(pt); cur.exited=true; spans.push(cur); cur=null; inside=false; }
+      else { cur={pts:[pt],entered:true,exited:false}; inside=true; }
+    }
+    if (inside) cur.pts.push([bx,by]);
+  }
+  if (inside && cur) spans.push(cur);
+  return spans.filter(sp=>sp.pts.length>=2);
+}
+function lensPath(pts, w){
+  const L=[0]; for (let i=1;i<pts.length;i++) L.push(L[i-1]+Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]));
+  const tot=L[L.length-1]||1, left=[], right=[];
+  for (let i=0;i<pts.length;i++){
+    const a=pts[Math.max(0,i-1)], b=pts[Math.min(pts.length-1,i+1)]; let tx=b[0]-a[0], ty=b[1]-a[1]; const tl=Math.hypot(tx,ty)||1; tx/=tl; ty/=tl;
+    const ww=w*Math.pow(Math.max(0.12,Math.sin(Math.PI*L[i]/tot)),0.7);
+    left.push([pts[i][0]-ty*ww,pts[i][1]+tx*ww]); right.push([pts[i][0]+ty*ww,pts[i][1]-tx*ww]);
+  }
+  const P=new Path2D(); const all=left.concat(right.reverse()); P.moveTo(all[0][0],all[0][1]); for (let i=1;i<all.length;i++) P.lineTo(all[i][0],all[i][1]); P.closePath();
+  return P;
+}
+function resample(pts, step){
+  const out=[pts[0]];
+  for (let i=1;i<pts.length;i++){ const a=pts[i-1], b=pts[i], d=Math.hypot(b[0]-a[0],b[1]-a[1]), n=Math.max(1,Math.ceil(d/step)); for (let k=1;k<=n;k++) out.push([a[0]+(b[0]-a[0])*k/n, a[1]+(b[1]-a[1])*k/n]); }
+  return out;
+}
+// A gash that opens the skin along part of the blade's path without severing the piece.
+function addWound(p, worldPts, depth){
+  let rest=worldPts.map(([x,y])=>toRest(p,x,y)); let len=0; for (let i=1;i<rest.length;i++) len+=Math.hypot(rest[i][0]-rest[i-1][0],rest[i][1]-rest[i-1][1]);
+  if (len<1.2) return false;
+  rest=resample(rest,1.5);
+  const wd={pts:rest,len,depth,w:0.9+2*depth,bleed:1,frame:-1}; wd.path=lensPath(rest,wd.w);
+  p.wounds.push(wd); p.damage+=depth*0.35*Math.min(1,len/25);
+  if (state.alive && p.comp===state.heartComp) state.pendingPain+=0.05+0.28*depth*Math.min(1,len/20);
+  for (let i=0;i<Math.min(10,len*0.6);i++){ const q=rest[(Math.random()*rest.length)|0], [wx,wy]=toWorld(p,q[0],q[1]);
+    addP({k:0,x:wx,y:wy,vx:p.vx+rnd(-60,60),vy:p.vy+rnd(-90,10),life:rnd(0.4,1.1),r:rnd(0.5,1.4),col:BLOODS[(Math.random()*4)|0]}); }
+  return true;
+}
+/* Cut along a polyline (world coords). A piece the path fully crosses is severed along the entry-exit chord when the
+   blade has enough power for it, otherwise it gets a gash part of the way in. With opt.final, paths that stop inside a
+   piece leave a gash that follows the cursor. opt.from(p) gives the path index to start from for that piece. */
+function cutPath(path, opt={}){
+  if (path.length<2) return 0;
+  const power=opt.power ?? dPower(), push=opt.push ?? 45;
+  let hits=0, x0=1e9,y0=1e9,x1=-1e9,y1=-1e9; for (const [x,y] of path){ x0=Math.min(x0,x); y0=Math.min(y0,y); x1=Math.max(x1,x); y1=Math.max(y1,y); }
   for (const p of pieces.slice()){
     if (opt.filter && !opt.filter(p)) continue;
-    if (distToSeg(p.x,p.y,x1,y1,x2,y2) > p.rad) continue;
-    if (!segHitsPiece(p,x1,y1,x2,y2)) continue;
-    if (cutPiece(p,x1,y1,dx,dy,push)) hits++;
+    if (p.x+p.rad<x0 || p.x-p.rad>x1 || p.y+p.rad<y0 || p.y-p.rad>y1) continue;
+    const from=opt.from ? opt.from(p) : 0; if (from>=path.length-1) continue;
+    const sub=from ? path.slice(from) : path;
+    const spans=pathSpans(sub, worldVerts(p)); if (!spans.length) continue;
+    const full=spans.find(sp=>sp.entered&&sp.exited);
+    if (full){
+      const a=full.pts[0], b=full.pts[full.pts.length-1], chord=Math.hypot(b[0]-a[0],b[1]-a[1]); if (chord<0.5) continue;
+      const req=requiredPower(p,chord);
+      if (power>=req){
+        const kids=cutPiece(p,a[0],a[1],(b[0]-a[0])/chord,(b[1]-a[1])/chord,push);
+        if (kids){ hits++; opt.onTouch && kids.forEach(opt.onTouch); }
+      } else {
+        const depth=clamp(power/req,0.08,0.92), n=Math.max(2,Math.round(full.pts.length*depth));
+        const pts=resample(full.pts,2); const cut=pts.slice(0,Math.max(2,Math.round(pts.length*depth)));
+        if (addWound(p,cut,depth)) hits++;
+        opt.onTouch && opt.onTouch(p); void n;
+      }
+    } else if (opt.final){
+      for (const sp of spans){ if (addWound(p,sp.pts,clamp(power,0.25,0.9)*0.7)) hits++; }
+      opt.onTouch && opt.onTouch(p);
+    }
   }
   const before=joints.length;
   joints=joints.filter(j=>{
     if (opt.filter && !opt.filter(j.a) && !opt.filter(j.b)) return true;
-    const [jx,jy]=toWorld(j.a,j.jx,j.jy); const keep=distToSeg(jx,jy,x1,y1,x2,y2) > 2.4;
+    const [jx,jy]=toWorld(j.a,j.jx,j.jy); let d=1e9;
+    for (let k=0;k<path.length-1;k++) d=Math.min(d,distToSeg(jx,jy,path[k][0],path[k][1],path[k+1][0],path[k+1][1]));
+    const keep = d>2.4 || power<requiredPower(j.b,15);
     if (!keep && state.alive && j.a.comp===state.heartComp) state.pendingPain+=0.3;
     return keep;
   });
   if (joints.length<before) hits++;
-  markWorld(x1,y1,x2,y2,opt.faint);
   if (hits){
     sfx.flesh(); if (state.alive) state.flail=Math.min(1.6,state.flail+0.7);
-    state.shake=Math.min(14,state.shake+(opt.faint?1.5:5)); if (!opt.faint) state.hitstop=0.05;
+    state.shake=Math.min(14,state.shake+(opt.faint?1.5:4)); if (!opt.faint && !opt.live) state.hitstop=0.05;
     computeComps(); updateVitals();
   }
   const pp=state.pendingPain; state.pendingPain=0; if (pp>0) hurt(pp);
   return hits;
+}
+function slash(x1,y1,x2,y2,opt={}){
+  const h=cutPath([[x1,y1],[x2,y2]],{...opt, final:true});
+  markWorld(x1,y1,x2,y2,opt.faint);
+  return h;
 }
 
 /* ---- connectivity & vitals ---- */
@@ -797,6 +906,7 @@ function die(reason){
 }
 function hurt(a){
   if (!state.alive) return;
+  a*=subject.pain;
   state.pain=Math.min(1.4,state.pain+a); state.moanT=Math.max(state.moanT,1.2);
   voice.hurtScream(clamp(a*1.3+state.pain*0.35,0.12,1));
 }
@@ -931,10 +1041,25 @@ function bloodBurst(p, amount){
     }
   }
 }
+let frameNo=0;
+function emitWounds(p, dt, pumping){
+  for (const wd of p.wounds){
+    if (wd.bleed<0.02) continue;
+    const rate=wd.len*wd.bleed*wd.depth*(pumping?1.2:0.3);
+    if (wd.frame!==frameNo){ wd.frame=frameNo; wd.bleed*=Math.exp(-dt/(pumping?9:3)); if (pumping) state.blood=Math.max(0,state.blood-rate*dt*0.05*subject.drain); }
+    let n=rate*dt*0.3; n=Math.floor(n)+(Math.random()<n%1?1:0);
+    for (let i=0;i<n;i++){
+      const q=wd.pts[(Math.random()*wd.pts.length)|0]; if (!pointInPoly(q[0],q[1],p.v)) continue;
+      const [wx,wy]=toWorld(p,q[0],q[1]), sp=pumping?rnd(10,70):rnd(0,12), a=rnd(0,TAU);
+      addP({k:0,x:wx,y:wy,vx:p.vx+Math.cos(a)*sp,vy:p.vy+Math.sin(a)*sp,life:rnd(0.5,1.4),r:rnd(0.5,1.3),col:BLOODS[(Math.random()*4)|0]});
+    }
+  }
+}
 function emitBleed(p, dt, pumping){
+  if (p.wounds.length) emitWounds(p,dt,pumping);
   if (!p.hasCut || p.bleed<0.02) return;
   const rate=p.cutLen*p.bleed*(pumping?1.6:0.45);
-  if (pumping) state.blood=Math.max(0,state.blood-rate*dt*0.11);
+  if (pumping) state.blood=Math.max(0,state.blood-rate*dt*0.11*subject.drain);
   p.bleed*=Math.exp(-dt/(pumping?7:2.6));
   let n=rate*dt*0.35; n=Math.floor(n)+(Math.random()<n%1?1:0);
   for (let i=0;i<n;i++){
@@ -954,9 +1079,9 @@ function clearWorldLayers(){ wallCtx.save(); wallCtx.setTransform(1,0,0,1,0,0); 
   floorCtx.save(); floorCtx.setTransform(1,0,0,1,0,0); floorCtx.clearRect(0,0,floorCnv.width,floorCnv.height); floorCtx.restore(); }
 function floorSplat(x, r, col, depth){ const y=depth ?? rnd(0.5,14); floorCtx.globalAlpha=0.85; ell(floorCtx,x,y,r*rnd(1.6,3),r*rnd(0.35,0.6),0,col); floorCtx.globalAlpha=1; }
 function wallSplat(x,y,r,col){ wallCtx.globalAlpha=0.6; dot(wallCtx,x,y,r,col); wallCtx.globalAlpha=1; }
-function markWorld(x1,y1,x2,y2,faint){
+function markWorld(x1,y1,x2,y2,faint,exact){
   // scar on the backdrop and gouge on the floor, like the cut went through everything behind the body
-  const dx=x2-x1, dy=y2-y1, L=Math.hypot(dx,dy), ux=dx/L, uy=dy/L, ext=faint?60:140;
+  const dx=x2-x1, dy=y2-y1, L=Math.hypot(dx,dy); if (L<0.01) return; const ux=dx/L, uy=dy/L, ext=exact?0:faint?60:140;
   const ax=x1-ux*ext, ay=y1-uy*ext, bx=x2+ux*ext, by=y2+uy*ext;
   wallCtx.save(); wallCtx.beginPath(); wallCtx.rect(WL.x0,WL.y0,WL.x1-WL.x0,-WL.y0-0.5); wallCtx.clip();
   wallCtx.lineCap='round';
@@ -969,15 +1094,30 @@ function addSlashFx(x1,y1,x2,y2,w,kind){ fxs.push({kind:kind||'slash',x1,y1,x2,y
 
 /* ================= techniques ================= */
 let mode='dismantle', xray=false, slowmo=false, domain=null, domainCd=0;
+const SUBJECTS={
+  frail:{tough:0.6,drain:1.4,pain:1.3,pitch:1.08,stoic:0,desc:'Cuts go through with no resistance. Bleeds out fast and panics easily.'},
+  average:{tough:1,drain:1,pain:1,pitch:1,stoic:0,desc:'Full-power Dismantle cuts clean through any part.'},
+  athlete:{tough:1.6,drain:0.8,pain:0.8,pitch:0.92,stoic:0.4,desc:'Dense muscle. Full-power Dismantle takes off limbs but only gashes the torso and head. Grunts through small cuts.'},
+  sorcerer:{tough:3.4,drain:0.55,pain:0.55,pitch:0.86,stoic:0.8,desc:'Cursed energy reinforces the body. Dismantle mostly leaves gashes until a part is worn down. Cleave adapts and still cuts. Barely screams.'},
+};
+const SEG_RES={head:0.95,neck:0.6,chest:0.95,abdomen:0.8,pelvis:0.9,upperArm:0.75,forearm:0.7,hand:0.55,thigh:0.9,shin:0.8,foot:0.6};
+const settings={subject:'average',power:100,blade:'live'};
+try{ Object.assign(settings, JSON.parse(localStorage.getItem('shrine-settings')||'{}')); }catch(e){}
+if (!SUBJECTS[settings.subject]) settings.subject='average';
+let subject=SUBJECTS[settings.subject];
+function saveSettings(){ try{ localStorage.setItem('shrine-settings',JSON.stringify(settings)); }catch(e){} }
+const dPower=()=>settings.power/100;
+function requiredPower(p, chord){ return subject.tough*SEG_RES[baseOf(p.seg)]*clamp(chord/40,0.4,1.1)*(1-Math.min(0.6,p.damage)); }
 const DOMAIN_CD=12;
 
-function dismantle(x1,y1,x2,y2){
-  const L=Math.hypot(x2-x1,y2-y1), ux=(x2-x1)/L, uy=(y2-y1)/L;
-  const ax=x1-ux*40, ay=y1-uy*40, bx=x2+ux*40, by=y2+uy*40;
-  addSlashFx(ax,ay,bx,by,4.5); sfx.slash(); slash(ax,ay,bx,by,{push:50});
+function markPath(path, faint){ for (let i=0;i<path.length-1;i++) markWorld(path[i][0],path[i][1],path[i+1][0],path[i+1][1],faint,true); }
+function dismantlePath(path){
+  fxs.push({kind:'path',pts:path.slice(),w:4,t:0,life:0.4}); sfx.slash();
+  cutPath(path,{push:50,final:true}); markPath(path,false);
   if (Math.random()<0.5 || !callout.recent()) callout.show('解','Dismantle');
 }
-function quickDismantle(x,y){ const a=rnd(0,Math.PI); const ux=Math.cos(a), uy=Math.sin(a); dismantle(x-ux*90,y-uy*90,x+ux*90,y+uy*90); }
+function dismantle(x1,y1,x2,y2){ dismantlePath([[x1,y1],[x2,y2]]); }
+function quickDismantle(x,y){ const a=rnd(0,Math.PI), ux=Math.cos(a)*9, uy=Math.sin(a)*9; dismantlePath([[x-ux,y-uy],[x+ux,y+uy]]); }
 let famCounter=1;
 function cleave(target){
   const fam=++famCounter; target.fam=fam; callout.show('捌','Cleave'); state.shake+=3;
@@ -989,7 +1129,7 @@ function cleave(target){
       fam_.sort((a,b)=>b.area-a.area); const p=fam_[0];
       const a=rnd(0,Math.PI), ux=Math.cos(a), uy=Math.sin(a), r=p.rad+8, ox=p.x+rnd(-0.25,0.25)*p.rad, oy=p.y+rnd(-0.25,0.25)*p.rad;
       addSlashFx(ox-ux*r,oy-uy*r,ox+ux*r,oy+uy*r,3,'cleave'); sfx.slash();
-      slash(ox-ux*r,oy-uy*r,ox+ux*r,oy+uy*r,{push:35,filter:q=>q.fam===fam,faint:true});
+      slash(ox-ux*r,oy-uy*r,ox+ux*r,oy+uy*r,{push:35,filter:q=>q.fam===fam,faint:true,power:Infinity});
     }});
   }
 }
@@ -1030,7 +1170,7 @@ function domainSlash(){
   else { x=rnd(-HW*0.8,HW*0.8); y=rnd(-380,-10); }
   const a=rnd(0,Math.PI), ux=Math.cos(a), uy=Math.sin(a), h=rnd(60,200);
   addSlashFx(x-ux*h,y-uy*h,x+ux*h,y+uy*h,rnd(1.6,3.2),'domain'); sfx.slash();
-  slash(x-ux*h,y-uy*h,x+ux*h,y+uy*h,{push:rnd(40,90),faint:true});
+  slash(x-ux*h,y-uy*h,x+ux*h,y+uy*h,{push:rnd(40,90),faint:true,power:dPower()*1.3});
 }
 function updateDomain(dt){
   if (domainCd>0) domainCd=Math.max(0,domainCd-dt);
@@ -1081,87 +1221,200 @@ const sfx={
   domain(){ tone(5.5,'sawtooth',55,51,0.16,0.8,320); tone(5.5,'sawtooth',55.6,51.5,0.13,0.8,320); tone(3.5,'sine',196,195,0.07,0.01); tone(3.8,'sine',293,292,0.045,0.01); noise(1.2,'bandpass',200,1800,2,0.15,0.6); },
 };
 
-/* ---- voice: a formant-synthesized throat for screams, sobs, groans and gasps ---- */
-const VOWELS={ ah:[850,1250,2800], eh:[650,1750,2700], oh:[480,850,2500], uh:[600,1050,2450], ee:[330,2100,2900] };
+/* ---- voice: glottal-pulse + formant synthesizer (runs in an AudioWorklet, falls back to a ScriptProcessor) ---- */
+class VoiceCore{
+  constructor(sr){
+    this.sr=sr; this.keys=null; this.kt=0; this.fadeG=1; this.fadeR=0; this.ctl=0; this.drive=1.4; this.gain=0.22;
+    const F0=[700,1200,2600,3400,4200];
+    this.p={f0:150,amp:0,asp:0,oq:0.5,rough:0,sub:0,jit:0.01,tilt:0.3,vib:0.01,F:F0.slice()};
+    this.s={f0:150,amp:0,asp:0,oq:0.5,rough:0,sub:0,jit:0.01,tilt:0.3,vib:0.01,F:F0.slice()};
+    this.B=[80,100,150,230,300];
+    this.y1=[0,0,0,0,0]; this.y2=[0,0,0,0,0]; this.ca=[0,0,0,0,0]; this.cb=[0,0,0,0,0]; this.cc=[0,0,0,0,0];
+    this.ph=0; this.pf=150; this.pAmp=1; this.pN=0; this.prevG=0; this.tiltY=0; this.nPrev=0; this.dcX=0; this.dcY=0;
+    this.rph=0; this.rf=70; this.vph=0; this.drift=0;
+    this.coefs();
+  }
+  handle(m){
+    if (m.type==='keys'){ this.keys=m.keys; this.kt=0; this.fadeR=0; this.fadeG=1; }
+    else if (m.type==='stop'){ this.fadeR=1/Math.max(1,m.t*this.sr); }
+  }
+  lerpKey(p,a,b,u){
+    p.f0=a.f0+(b.f0-a.f0)*u; p.amp=a.amp+(b.amp-a.amp)*u; p.asp=a.asp+(b.asp-a.asp)*u; p.oq=a.oq+(b.oq-a.oq)*u;
+    p.rough=a.rough+(b.rough-a.rough)*u; p.sub=a.sub+(b.sub-a.sub)*u; p.jit=a.jit+(b.jit-a.jit)*u; p.tilt=a.tilt+(b.tilt-a.tilt)*u; p.vib=a.vib+(b.vib-a.vib)*u;
+    for (let j=0;j<5;j++) p.F[j]=a.F[j]+(b.F[j]-a.F[j])*u;
+  }
+  interp(){
+    const k=this.keys, p=this.p;
+    if (!k){ p.amp=0; p.asp=0; return; }
+    const t=this.kt, z=k[k.length-1];
+    if (t>=z.t){ this.lerpKey(p,z,z,0); p.amp=0; p.asp=0; this.keys=null; return; }
+    let i=0; while (i<k.length-2 && k[i+1].t<=t) i++;
+    const a=k[i], b=k[i+1]; this.lerpKey(p,a,b,clamp01((t-a.t)/Math.max(1e-6,b.t-a.t)));
+    function clamp01(v){ return v<0?0:v>1?1:v; }
+  }
+  coefs(){
+    const T=1/this.sr, s=this.s;
+    for (let i=0;i<5;i++){
+      const F=Math.min(s.F[i],this.sr*0.45), B=this.B[i]*(1+s.asp*0.8)+(i===0?s.f0*0.12:0);
+      const r=Math.exp(-Math.PI*B*T), C=-r*r, Bc=2*r*Math.cos(2*Math.PI*F*T);
+      this.cb[i]=Bc; this.cc[i]=C; this.ca[i]=1-Bc-C;
+    }
+  }
+  process(out){
+    const sr=this.sr, s=this.s, p=this.p;
+    for (let i=0;i<out.length;i++){
+      if ((this.ctl++ & 31)===0){
+        this.interp(); this.kt+=32/sr;
+        const fa=0.35;
+        s.f0+=(p.f0-s.f0)*0.5; s.amp+=(p.amp-s.amp)*0.5; s.asp+=(p.asp-s.asp)*fa; s.oq+=(p.oq-s.oq)*fa; s.rough+=(p.rough-s.rough)*fa;
+        s.sub+=(p.sub-s.sub)*fa; s.jit+=(p.jit-s.jit)*fa; s.tilt+=(p.tilt-s.tilt)*fa; s.vib+=(p.vib-s.vib)*fa;
+        for (let j=0;j<5;j++) s.F[j]+=(p.F[j]-s.F[j])*0.3;
+        this.coefs();
+        this.drift+=((Math.random()*2-1)-this.drift)*0.02;
+        this.rf=Math.min(130,Math.max(40,this.rf+(Math.random()-0.5)*8));
+      }
+      // glottal pulse train with jitter, shimmer and period-doubling (subharmonics)
+      this.vph+=6.2831853*5.4/sr;
+      const f=s.f0*(1+s.vib*Math.sin(this.vph)+this.drift*s.jit*1.5);
+      this.ph+=this.pf/sr;
+      if (this.ph>=1){
+        this.ph-=1; this.pN++;
+        const g=(Math.random()+Math.random()+Math.random()-1.5)*1.15, odd=this.pN&1;
+        this.pf=Math.max(40,f*(1+s.jit*g)*(odd?1+s.sub*0.08:1-s.sub*0.08));
+        this.pAmp=(1+s.jit*2.5*(Math.random()*2-1))*(odd?1-s.sub*0.75:1);
+      }
+      const te=Math.max(0.25,Math.min(0.9,s.oq)), tp=te*0.62, t=this.ph;
+      const gl=t<tp?0.5*(1-Math.cos(Math.PI*t/tp)):t<te?Math.cos(1.5707963*(t-tp)/(te-tp)):0;
+      let e=(gl-this.prevG)*this.pAmp*(sr/this.pf)*0.08; this.prevG=gl;
+      this.tiltY+=(e-this.tiltY)*(1-s.tilt*0.92); e=this.tiltY;
+      // breath noise, pulsed by the glottal flow
+      const nz=Math.random()*2-1, hp=nz-this.nPrev*0.7; this.nPrev=nz;
+      let x=e*s.amp+hp*s.asp*(0.3+0.7*gl)*1.6;
+      // roughness: 40-130 Hz amplitude modulation, the acoustic signature of a scream
+      this.rph+=6.2831853*this.rf/sr;
+      x*=1-s.rough*0.42*(1+Math.sin(this.rph));
+      // vocal tract: five cascaded formant resonators
+      for (let j=0;j<5;j++){ const y=this.ca[j]*x+this.cb[j]*this.y1[j]+this.cc[j]*this.y2[j]; this.y2[j]=this.y1[j]; this.y1[j]=y; x=y; }
+      const y=x-this.dcX+0.995*this.dcY; this.dcX=x; this.dcY=y;
+      if (this.fadeR>0){ this.fadeG-=this.fadeR; if (this.fadeG<=0){ this.fadeG=1; this.fadeR=0; this.keys=null; p.amp=0; p.asp=0; s.amp=0; s.asp=0; this.y1=[0,0,0,0,0]; this.y2=[0,0,0,0,0]; out[i]=0; continue; } }
+      out[i]=Math.tanh(y*this.gain*this.drive)*0.7*this.fadeG;
+    }
+  }
+}
+
+const V5={ ah:[800,1250,2650,3400,4300], aa:[950,1400,2700,3500,4400], ae:[720,1650,2550,3400,4300], eh:[620,1750,2600,3450,4300],
+  uh:[620,1150,2500,3350,4200], oh:[480,880,2500,3300,4200], ee:[320,2150,2900,3500,4400], ih:[420,1800,2550,3400,4300], ng:[300,1100,2400,3300,4200] };
+const pick=a=>a[(Math.random()*a.length)|0];
+function vkey(t,o){ return {t, f0:o.f0, amp:o.amp??0, asp:o.asp??0.05, oq:o.oq??0.5, rough:o.rough??0, sub:o.sub??0, jit:o.jit??0.012, tilt:o.tilt??0.3, vib:o.vib??0.008, F:(o.F||V5.ah).slice()}; }
+function makeIR(sec){
+  const len=Math.floor(ac.sampleRate*sec), b=ac.createBuffer(2,len,ac.sampleRate);
+  for (let c=0;c<2;c++){ const d=b.getChannelData(c); for (let i=0;i<len;i++){ const t=i/len; d[i]=(Math.random()*2-1)*Math.pow(1-t,3)*(i<ac.sampleRate*0.012?0.3:1); } }
+  return b;
+}
 const voice={
-  ready:false, env:null, lastHit:0,
-  init(){
-    if (this.ready || !ac) return;
-    const o=ac.createOscillator(); o.type='sawtooth'; o.frequency.value=180;
-    const vib=ac.createOscillator(); vib.frequency.value=5.8; const vibG=ac.createGain(); vibG.gain.value=0; vib.connect(vibG); vibG.connect(o.frequency);
-    const rough=ac.createOscillator(); rough.frequency.value=31; const roughG=ac.createGain(); roughG.gain.value=0; rough.connect(roughG); roughG.connect(o.frequency);
-    const nz=ac.createBufferSource(); nz.buffer=noiseBuf; nz.loop=true; const nzG=ac.createGain(); nzG.gain.value=0.2;
-    const voiced=ac.createGain(); voiced.gain.value=1; const pre=ac.createGain();
-    o.connect(voiced); voiced.connect(pre); nz.connect(nzG); nzG.connect(pre);
-    const sh=ac.createWaveShaper(); const curve=new Float32Array(1024); for (let i=0;i<1024;i++){ const x=i/511.5-1; curve[i]=Math.tanh(x*2.4); } sh.curve=curve; pre.connect(sh);
-    const out=ac.createGain(); out.gain.value=0;
-    const fs=[]; [[5,2.4],[7,1.7],[9,1.1]].forEach(([q,g],i)=>{ const f=ac.createBiquadFilter(); f.type='bandpass'; f.Q.value=q; f.frequency.value=VOWELS.ah[i]; const fg=ac.createGain(); fg.gain.value=g; sh.connect(f); f.connect(fg); fg.connect(out); fs.push(f); });
-    out.connect(master);
-    o.start(); vib.start(); rough.start(); nz.start();
-    Object.assign(this,{o,vibG,roughG,nzG,voiced,fs,out,ready:true});
+  ready:false, loading:false, keys:null, t0:0, dur:0, kind:'', lastHit:0,
+  async init(){
+    if (this.ready || this.loading || !ac) return; this.loading=true;
+    const bus=ac.createGain(), pres=ac.createBiquadFilter(), dry=ac.createGain(), wet=ac.createGain(), conv=ac.createConvolver();
+    pres.type='highshelf'; pres.frequency.value=2400; pres.gain.value=9;
+    bus.gain.value=2.4; dry.gain.value=1; wet.gain.value=0.2; conv.buffer=makeIR(1.5);
+    bus.connect(pres); pres.connect(dry); pres.connect(conv); conv.connect(wet); dry.connect(master); wet.connect(master);
+    try{
+      if (!ac.audioWorklet || !window.AudioWorkletNode) throw new Error('no worklet');
+      const src=VoiceCore.toString()+"\nclass VoiceProc extends AudioWorkletProcessor{constructor(){super();this.core=new VoiceCore(sampleRate);this.port.onmessage=e=>this.core.handle(e.data);}process(i,o){this.core.process(o[0][0]);return true;}}\nregisterProcessor('voice-core',VoiceProc);";
+      const url=URL.createObjectURL(new Blob([src],{type:'application/javascript'}));
+      await ac.audioWorklet.addModule(url);
+      this.node=new AudioWorkletNode(ac,'voice-core',{numberOfInputs:0,numberOfOutputs:1,outputChannelCount:[1]});
+      this.post=m=>this.node.port.postMessage(m); this.engine='worklet';
+    }catch(e){
+      const c=new VoiceCore(ac.sampleRate); this.node=ac.createScriptProcessor(1024,1,1);
+      this.node.onaudioprocess=ev=>c.process(ev.outputBuffer.getChannelData(0)); this.post=m=>c.handle(m); this.engine='script';
+    }
+    this.node.connect(bus); this.ready=true;
   },
   now(){ return performance.now()/1000; },
   weak(){ return clamp((state.blood-25)/75,0.15,1); },
-  utter(sp){
-    const att=sp.att||0.04, rel=sp.rel||0.25;
-    this.env={t0:this.now(), dur:sp.dur, att, rel, mouth:sp.mouth, pulses:sp.pulses||0, kind:sp.kind};
-    if (!this.ready) return;
-    const t=ac.currentTime, g=this.out.gain, f=this.o.frequency;
-    g.cancelScheduledValues(t); g.setValueAtTime(Math.max(0.0001,g.value),t);
-    if (sp.pulses){
-      const per=sp.dur/sp.pulses;
-      for (let i=0;i<sp.pulses;i++){ const a=t+i*per; g.linearRampToValueAtTime(sp.vol,a+per*0.25); g.linearRampToValueAtTime(sp.vol*0.05,a+per*0.9); }
-      g.linearRampToValueAtTime(0,t+sp.dur+0.1);
-    } else {
-      g.linearRampToValueAtTime(sp.vol,t+att); g.linearRampToValueAtTime(sp.vol*0.8,t+sp.dur); g.linearRampToValueAtTime(0,t+sp.dur+rel);
+  play(kind, keys){
+    keys.sort((a,b)=>a.t-b.t); this.keys=keys; this.t0=this.now(); this.kind=kind; this.dur=keys[keys.length-1].t;
+    if (this.ready) this.post({type:'keys',keys});
+  },
+  busy(){ return !!this.keys && this.now()-this.t0 < this.dur; },
+  scream(I, low){
+    I=clamp(I,0.15,1); const w=this.weak(), pm=subject.pitch*(low?0.62:1);
+    const vol=(0.6+0.4*I)*(0.4+0.6*w), peak=(240+300*I)*pm*(0.75+0.25*w)*rnd(0.93,1.07);
+    const dur=(0.45+1.35*I)*(0.6+0.4*w)*rnd(0.85,1.15);
+    const V=low?pick([V5.uh,V5.ah]):pick([V5.aa,V5.ah,V5.ae,I>0.7?V5.eh:V5.aa]), E=pick([V5.uh,V5.ah,V5.oh]);
+    const rough=(low?0.6:0.35)+0.45*I, sub=(0.12+0.35*I*rnd(0.5,1))*(low?1.4:1), tilt=0.12-0.06*I;
+    const K=[vkey(0,{f0:peak*0.6,F:V,rough,sub,oq:0.4,tilt,asp:0.25}),
+      vkey(0.03,{f0:peak*0.82,amp:vol,F:V,rough:rough*1.2,sub,oq:0.38,tilt,jit:0.035,asp:0.12}),
+      vkey(0.14,{f0:peak,amp:vol,F:V,rough,sub,oq:0.36,tilt,jit:0.02,vib:0.012,asp:0.1})];
+    if (dur>0.9 && Math.random()<0.45*I){ // voice crack: the pitch breaks upward for a moment
+      const tc=0.2+Math.random()*(dur*0.7-0.4);
+      K.push(vkey(tc,{f0:peak*1.03,amp:vol,F:V,rough,sub,oq:0.36,tilt,jit:0.02}), vkey(tc+0.025,{f0:peak*1.4,amp:vol*0.8,F:V,rough:rough*0.6,sub:0,oq:0.45,tilt,asp:0.2}),
+             vkey(tc+0.14,{f0:peak*1.32,amp:vol*0.85,F:V,rough:rough*0.7,oq:0.42,tilt}), vkey(tc+0.17,{f0:peak,amp:vol,F:V,rough,sub,oq:0.36,tilt}));
     }
-    f.cancelScheduledValues(t); f.setValueAtTime(sp.f0*0.75,t); f.exponentialRampToValueAtTime(sp.f0,t+0.08);
-    f.exponentialRampToValueAtTime(sp.f0*1.06,t+Math.max(0.1,sp.dur*0.55)); f.exponentialRampToValueAtTime(sp.f1,t+sp.dur+rel);
-    this.vibG.gain.setTargetAtTime(sp.f0*(sp.vib??0.035),t,0.05);
-    this.roughG.gain.setTargetAtTime(sp.f0*(sp.rough??0.05),t,0.05);
-    this.nzG.gain.setTargetAtTime(sp.breath,t,0.02);
-    this.voiced.gain.setTargetAtTime(sp.voicing??1,t,0.02);
-    const v1=VOWELS[sp.vowel], v2=VOWELS[sp.vowel2||sp.vowel];
-    this.fs.forEach((fl,i)=>{ fl.frequency.cancelScheduledValues(t); fl.frequency.setTargetAtTime(v1[i],t,0.03); fl.frequency.setTargetAtTime(v2[i],t+sp.dur*0.6,0.15); });
+    K.push(vkey(dur*0.72,{f0:peak*1.05,amp:vol*0.95,F:V,rough,sub,oq:0.36,tilt,jit:0.025,vib:0.015,asp:0.1}),
+      vkey(dur,{f0:peak*0.86,amp:vol*0.72,F:E,rough:rough*1.3,sub:sub*1.5,oq:0.42,tilt,asp:0.2,jit:0.04}),
+      vkey(dur+0.25,{f0:peak*0.55,amp:0,F:E,sub:0.5,rough:0.8,asp:0.3}));
+    if (I>0.45 && dur>0.8 && !low){ // ragged inhale before the next scream
+      const t=dur+0.32;
+      K.push(vkey(t,{f0:peak*1.3,asp:0,F:V5.ih}), vkey(t+0.05,{f0:peak*1.5,amp:0.07*vol,asp:0.7,F:V5.ih,tilt:0.6,jit:0.06}),
+             vkey(t+0.3,{f0:peak*1.6,amp:0.05*vol,asp:0.55,F:V5.uh,tilt:0.6,jit:0.06}), vkey(t+0.36,{f0:peak*1.6,asp:0,F:V5.uh}));
+    }
+    this.play(low?'roar':'scream',K);
   },
-  scream(I){
-    I=clamp(I,0.15,1); const w=this.weak();
-    const f0=(230+300*I)*(0.7+0.3*w)*rnd(0.94,1.06);
-    this.utter({kind:'scream',f0,f1:f0*0.6,dur:(0.4+1.4*I)*(0.6+0.4*w),vol:(0.35+0.4*I)*(0.4+0.6*w),vowel:I>0.6?'eh':'ah',vowel2:'ah',
-      breath:0.25+0.5*(1-w),rough:0.04+0.08*I,mouth:0.55+0.45*I});
-  },
-  yelp(){ const f0=rnd(380,460)*(0.75+0.25*this.weak()); this.utter({kind:'scream',f0,f1:f0*0.7,dur:0.22,vol:0.45,vowel:'ah',breath:0.2,rough:0.05,att:0.02,rel:0.12,mouth:0.7}); },
-  groan(){ const w=this.weak(); this.utter({kind:'groan',f0:rnd(110,140)*(0.8+0.2*w),f1:90,dur:rnd(0.9,1.5),vol:0.3*(0.5+0.5*w),vowel:'oh',vowel2:'uh',breath:0.35,rough:0.06,vib:0.02,att:0.15,rel:0.4,mouth:0.3}); },
-  sob(){ this.utter({kind:'sob',f0:rnd(240,290),f1:200,dur:rnd(0.9,1.3),vol:0.3,vowel:'uh',vowel2:'oh',breath:0.6,rough:0.03,pulses:3+((Math.random()*2)|0),mouth:0.45}); },
-  whimper(){ this.utter({kind:'whimper',f0:rnd(420,520),f1:300,dur:0.6,vol:0.2,vowel:'ee',vowel2:'uh',breath:0.5,rough:0.02,att:0.06,rel:0.2,mouth:0.3}); },
-  gasp(){ this.utter({kind:'gasp',f0:300,f1:250,dur:0.28,vol:0.3,vowel:'ah',breath:1,voicing:0.08,att:0.05,rel:0.12,mouth:0.6}); },
+  yelp(){ const f=rnd(400,480)*subject.pitch*(0.75+0.25*this.weak());
+    this.play('scream',[vkey(0,{f0:f*0.7,F:V5.aa,rough:0.4,oq:0.38,tilt:0.12}),vkey(0.025,{f0:f,amp:0.75,F:V5.aa,rough:0.45,sub:0.15,oq:0.36,tilt:0.1,jit:0.03}),
+      vkey(0.2,{f0:f*0.92,amp:0.6,F:V5.uh,rough:0.5,oq:0.4,tilt:0.15}),vkey(0.32,{f0:f*0.6,F:V5.uh,asp:0.2})]); },
+  grunt(){ const f=rnd(115,155)*subject.pitch;
+    this.play('grunt',[vkey(0,{f0:f,F:V5.ng,oq:0.32,rough:0.5,sub:0.4,tilt:0.3}),vkey(0.02,{f0:f*1.1,amp:1.1,F:V5.ng,oq:0.32,rough:0.5,sub:0.4,tilt:0.3,jit:0.04}),
+      vkey(0.14,{f0:f*1.15,amp:1,F:V5.uh,oq:0.33,rough:0.55,sub:0.45,tilt:0.3,asp:0.15}),vkey(0.3,{f0:f*0.8,F:V5.uh,asp:0.3,sub:0.5,rough:0.6})]); },
+  groan(){ const w=this.weak(), f=rnd(105,135)*subject.pitch*(0.85+0.15*w), d=rnd(1,1.6);
+    this.play('groan',[vkey(0,{f0:f*0.9,F:V5.oh,oq:0.6,tilt:0.5,sub:0.35,rough:0.25}),vkey(0.18,{f0:f,amp:1.3*(0.5+0.5*w),F:V5.oh,oq:0.6,tilt:0.5,sub:0.35,rough:0.25,asp:0.15,jit:0.03}),
+      vkey(d*0.6,{f0:f*1.05,amp:1.2*(0.5+0.5*w),F:V5.ah,oq:0.58,tilt:0.5,sub:0.3,rough:0.25,asp:0.15}),vkey(d,{f0:f*0.85,amp:0.9,F:V5.uh,oq:0.62,tilt:0.55,sub:0.45,rough:0.3,asp:0.2}),
+      vkey(d+0.35,{f0:f*0.7,F:V5.uh,asp:0.15,sub:0.6})]); },
+  sob(){ const f=rnd(260,320)*subject.pitch, n=3+((Math.random()*2)|0), K=[vkey(0,{f0:f,F:V5.uh})]; let t=0.02;
+    for (let i=0;i<n;i++){
+      const fi=f*rnd(0.9,1.12);
+      K.push(vkey(t,{f0:fi,amp:0.8,F:V5.uh,asp:0.35,jit:0.06,oq:0.55,tilt:0.35,rough:0.2}), vkey(t+0.16,{f0:fi*0.88,amp:0.55,F:V5.oh,asp:0.4,jit:0.07,oq:0.58,tilt:0.4}),
+             vkey(t+0.2,{f0:fi,amp:0,F:V5.ih,asp:0}), vkey(t+0.23,{f0:fi*1.3,amp:0.05,F:V5.ih,asp:0.6,tilt:0.6,jit:0.08}), vkey(t+0.33,{f0:fi,amp:0,F:V5.ih,asp:0}));
+      t+=0.36+Math.random()*0.08;
+    }
+    this.play('sob',K); },
+  whimper(){ const f=rnd(430,520)*subject.pitch;
+    this.play('whimper',[vkey(0,{f0:f*0.8,F:V5.ee,asp:0.3,tilt:0.5}),vkey(0.08,{f0:f,amp:0.5,F:V5.ee,asp:0.4,tilt:0.5,vib:0.03,jit:0.04,oq:0.6}),
+      vkey(0.4,{f0:f*1.08,amp:0.45,F:V5.ih,asp:0.4,tilt:0.5,vib:0.035,jit:0.05,oq:0.6}),vkey(0.65,{f0:f*0.8,amp:0.2,F:V5.uh,asp:0.4,tilt:0.55}),vkey(0.8,{f0:f*0.7,F:V5.uh})]); },
+  gasp(){ this.play('gasp',[vkey(0,{f0:300}),vkey(0.04,{f0:320,amp:0.04,asp:0.9,F:V5.ah,tilt:0.7}),vkey(0.24,{f0:330,amp:0.04,asp:0.7,F:V5.uh,tilt:0.7}),vkey(0.34,{f0:330})]); },
   ambient(){
     const p=state.pain, w=this.weak();
     if (w<0.45){ Math.random()<0.6 ? this.groan() : this.gasp(); return; }
-    if (p>0.75) this.scream(rnd(0.45,0.8));
-    else if (p>0.45) Math.random()<0.5 ? this.sob() : this.scream(rnd(0.25,0.45));
+    if (subject.stoic>0.6){ Math.random()<0.5 ? this.groan() : (p>0.8 ? this.scream(rnd(0.4,0.7),true) : this.gasp()); return; }
+    if (p>0.75) Math.random()<0.75 ? this.scream(rnd(0.45,0.85)) : this.sob();
+    else if (p>0.45) Math.random()<0.55 ? this.sob() : this.scream(rnd(0.25,0.5));
     else Math.random()<0.5 ? this.groan() : this.whimper();
   },
-  busy(){ const e=this.env; return !!e && this.now() < e.t0+e.dur+e.rel; },
   hurtScream(I){
     const n=this.now();
-    if (this.busy() && this.env.kind==='scream' && n-this.lastHit<0.35){ this.env.dur=Math.min(this.env.dur+0.15, n-this.env.t0+1.6); return; }
+    // already mid-scream: let it ride instead of restarting every hit
+    if (this.busy() && (this.kind==='scream'||this.kind==='roar') && n-this.t0 < this.dur*0.55) return;
     this.lastHit=n;
-    if (I<0.22 && !this.busy()) this.yelp(); else this.scream(this.busy()&&this.env.kind==='scream' ? Math.min(1,I+0.15) : I);
+    if (subject.stoic>0.6) return I<0.75 ? this.grunt() : this.scream(I,true);
+    if (subject.stoic>0.3 && I<0.4) return this.grunt();
+    if (I<0.22 && !this.busy()) return this.yelp();
+    this.scream(this.busy() ? Math.min(1,I+0.15) : I);
   },
-  stop(abrupt){
-    this.env=null; if (!this.ready) return;
-    const t=ac.currentTime, g=this.out.gain; g.cancelScheduledValues(t); g.setValueAtTime(g.value,t); g.linearRampToValueAtTime(0,t+(abrupt?0.025:0.3));
-  },
+  stop(abrupt){ this.keys=null; if (this.ready) this.post({type:'stop',t:abrupt?0.02:0.3}); },
   death(reason){
     if (/Decap|Brain|Torso|Vital|Incin/.test(reason)) this.stop(true);
-    else this.utter({kind:'rattle',f0:150,f1:70,dur:0.9,vol:0.22,vowel:'uh',vowel2:'oh',breath:0.8,voicing:0.5,rough:0.15,att:0.05,rel:0.6,mouth:0.35});
+    else this.play('rattle',[vkey(0,{f0:90,F:V5.uh}),vkey(0.06,{f0:85,amp:0.9,F:V5.uh,asp:0.6,sub:0.7,rough:0.9,oq:0.7,tilt:0.5}),
+      vkey(0.7,{f0:60,amp:0.5,F:V5.oh,asp:0.6,sub:0.8,rough:0.9,oq:0.7,tilt:0.55}),vkey(1.2,{f0:45,F:V5.oh,asp:0.2})]);
   },
   mouth(){
-    const e=this.env; if (!e) return 0; const t=this.now()-e.t0; let a;
-    if (t<e.att) a=t/e.att; else if (t<e.dur) a=1-0.2*(t-e.att)/Math.max(0.01,e.dur-e.att); else if (t<e.dur+e.rel) a=0.8*(1-(t-e.dur)/e.rel); else return 0;
-    if (e.pulses){ const per=e.dur/e.pulses, ph=(t%per)/per; a*= ph<0.25 ? ph/0.25 : Math.max(0.05,1-(ph-0.25)/0.65); }
-    return a*e.mouth;
+    const k=this.keys; if (!k) return 0; const t=this.now()-this.t0; if (t>=this.dur) return 0;
+    let i=0; while (i<k.length-2 && k[i+1].t<=t) i++;
+    const a=k[i], b=k[i+1], u=clamp((t-a.t)/Math.max(1e-6,b.t-a.t),0,1);
+    const amp=a.amp+(b.amp-a.amp)*u, asp=a.asp+(b.asp-a.asp)*u, F1=a.F[0]+(b.F[0]-a.F[0])*u;
+    return clamp(Math.min(1,amp)*(F1/850)*1.05+asp*0.45,0,1);
   },
 };
 
@@ -1312,6 +1565,7 @@ function updateFace(dt){
   if (state.alive && F.pain>0.4) F.tears=Math.min(1,F.tears+dt*0.12);
 }
 
+function lensCore(wd){ if (!wd.core) wd.core=lensPath(wd.pts,wd.w*0.55); return wd.core; }
 function drawPiece(p){
   const T=TEX[p.seg];
   ctx.save(); ctx.translate(OX+p.x*S, OY+p.y*S); ctx.rotate(p.a); ctx.scale(S,S); ctx.translate(-p.cx,-p.cy);
@@ -1324,6 +1578,14 @@ function drawPiece(p){
     ctx.drawImage(skin.cnv,skin.x0,skin.y0,skin.w,skin.h);
     if (p.seg==='head') drawFace(ctx,p);
     const pal=clamp((100-state.blood)/70,0,1)*0.38; if (pal>0.01){ ctx.fillStyle=`rgba(150,172,185,${pal})`; ctx.fill(p.body); }
+    for (const wd of p.wounds){
+      ctx.save(); ctx.clip(wd.path);
+      if (wd.depth<0.5){ ctx.fillStyle=COL.fat; ctx.fill(wd.path); ctx.fillStyle='rgba(158,38,48,.9)'; ctx.fill(lensCore(wd)); }
+      else ctx.drawImage(T.inner.cnv,T.inner.x0,T.inner.y0,T.inner.w,T.inner.h);
+      ctx.fillStyle='rgba(80,0,8,.22)'; ctx.fill(wd.path);
+      ctx.restore();
+      ctx.strokeStyle='#3a0008'; ctx.lineWidth=0.45; ctx.stroke(wd.path);
+    }
     if (p.hasCut){ ctx.save(); ctx.clip(p.band); ctx.drawImage(T.inner.cnv,T.inner.x0,T.inner.y0,T.inner.w,T.inner.h); ctx.restore(); }
   }
   if (p.char>0.01){ ctx.fillStyle=`rgba(24,10,5,${p.char*0.82})`; ctx.fill(p.body); }
@@ -1347,6 +1609,12 @@ function drawFx(){
       ctx.strokeStyle=`rgba(190,0,16,${0.45*fade})`; ctx.lineWidth=f.w*3.2*S*fade; ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by); ctx.stroke();
       ctx.strokeStyle=`rgba(5,0,2,${0.9*fade})`; ctx.lineWidth=f.w*1.3*S*fade; ctx.stroke();
       ctx.strokeStyle=`rgba(255,250,245,${k<0.25?1:fade})`; ctx.lineWidth=Math.max(1,f.w*0.45*S*fade); ctx.stroke();
+    } else if (f.kind==='path'){
+      const fade=1-k; ctx.lineCap='round'; ctx.lineJoin='round';
+      const tr=()=>{ ctx.beginPath(); ctx.moveTo(OX+f.pts[0][0]*S,OY+f.pts[0][1]*S); for (let i=1;i<f.pts.length;i++) ctx.lineTo(OX+f.pts[i][0]*S,OY+f.pts[i][1]*S); };
+      tr(); ctx.strokeStyle=`rgba(190,0,16,${0.45*fade})`; ctx.lineWidth=f.w*3*S*fade; ctx.stroke();
+      ctx.strokeStyle=`rgba(5,0,2,${0.85*fade})`; ctx.lineWidth=f.w*1.2*S*fade; ctx.stroke();
+      ctx.strokeStyle=`rgba(255,250,245,${k<0.25?1:fade})`; ctx.lineWidth=Math.max(1,f.w*0.4*S*fade); ctx.stroke();
     } else if (f.kind==='ring'){
       ctx.strokeStyle=`rgba(255,170,90,${1-k})`; ctx.lineWidth=(1-k)*10*S; ctx.beginPath(); ctx.arc(OX+f.x*S,OY+f.y*S,(10+k*140)*S,0,TAU); ctx.stroke();
     } else if (f.kind==='mark' && f.p){
@@ -1393,9 +1661,20 @@ function render(){
     ctx.globalCompositeOperation='source-over';
   }
   if (drag && drag.kind==='dismantle' && drag.moved){
-    const ax=OX+drag.x0*S, ay=OY+drag.y0*S, bx=OX+drag.x1*S, by=OY+drag.y1*S;
-    ctx.setLineDash([6*DPR,6*DPR]); ctx.strokeStyle='rgba(255,60,70,.85)'; ctx.lineWidth=1.5*DPR; ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by); ctx.stroke(); ctx.setLineDash([]);
-    dot(ctx,ax,ay,3*DPR,'#ff3b46'); dot(ctx,bx,by,3*DPR,'#ff3b46');
+    const P=drag.path; ctx.lineCap='round'; ctx.lineJoin='round';
+    if (settings.blade==='live'){
+      const now=performance.now(); let start=P.length-1; while (start>0 && now-drag.times[start-1]<180) start--;
+      for (let i=Math.max(1,start);i<P.length;i++){
+        const k=1-(now-drag.times[i])/180; if (k<=0) continue;
+        const ax=OX+P[i-1][0]*S, ay=OY+P[i-1][1]*S, bx=OX+P[i][0]*S, by=OY+P[i][1]*S;
+        ctx.strokeStyle=`rgba(190,0,16,${0.5*k})`; ctx.lineWidth=7*S*k; ctx.beginPath(); ctx.moveTo(ax,ay); ctx.lineTo(bx,by); ctx.stroke();
+        ctx.strokeStyle=`rgba(255,250,245,${k})`; ctx.lineWidth=Math.max(1,1.8*S*k); ctx.stroke();
+      }
+    } else {
+      ctx.setLineDash([6*DPR,6*DPR]); ctx.strokeStyle='rgba(255,60,70,.85)'; ctx.lineWidth=1.5*DPR; ctx.beginPath();
+      ctx.moveTo(OX+P[0][0]*S,OY+P[0][1]*S); for (let i=1;i<P.length;i++) ctx.lineTo(OX+P[i][0]*S,OY+P[i][1]*S); ctx.stroke(); ctx.setLineDash([]);
+      dot(ctx,OX+P[0][0]*S,OY+P[0][1]*S,3*DPR,'#ff3b46');
+    }
   }
   ctx.setTransform(1,0,0,1,0,0);
   for (const f of fxs){ if (f.kind==='flash'){ ctx.fillStyle=`rgba(255,200,150,${0.5*(1-f.t/f.life)})`; ctx.fillRect(0,0,W,H); } }
@@ -1404,7 +1683,7 @@ function render(){
 
 /* ================= update ================= */
 function updateGame(dt){
-  state.t+=dt;
+  state.t+=dt; frameNo++;
   state.shake*=Math.exp(-dt*9); if (state.shake<0.05) state.shake=0;
   state.flail*=Math.exp(-dt*1.4);
   if (state.knock>0) state.knock-=dt;
@@ -1468,7 +1747,7 @@ function updateHUD(){
 const callout=(()=>{ const el=$('callout'), k=el.querySelector('.ck'), n=el.querySelector('.cn'); let last=0;
   return { show(kanji,name,big){ k.textContent=kanji; n.textContent=name; el.classList.toggle('big',!!big); el.classList.remove('show'); void el.offsetWidth; el.classList.add('show'); last=performance.now(); },
            recent(){ return performance.now()-last<900; } }; })();
-const HINTS={dismantle:'Drag across the body to cut along that line. Tap for a quick slash.',cleave:'Tap a body part to carve it into chunks.',fuga:'Tap where the flame arrow should land.',grab:'Drag any piece around. Right-drag grabs in every mode.'};
+const HINTS={dismantle:'Drag across the body. The cut follows your cursor. Tap for a small nick.',cleave:'Tap a body part to carve it into chunks.',fuga:'Tap where the flame arrow should land.',grab:'Drag any piece around. Right-drag grabs in every mode.'};
 function setMode(m){ mode=m; document.querySelectorAll('.tech[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===m)); hud.hint.textContent=HINTS[m]; cv.style.cursor=m==='grab'?'grab':'crosshair'; }
 
 /* ================= input ================= */
@@ -1479,7 +1758,7 @@ cv.addEventListener('pointerdown',e=>{
   if (!started) return; audioInit(); cv.setPointerCapture(e.pointerId);
   const [x,y]=toWorldPt(e); pointerW=[x,y];
   const m = e.button===2 ? 'grab' : mode;
-  if (m==='dismantle'){ drag={kind:'dismantle',x0:x,y0:y,x1:x,y1:y,moved:false}; }
+  if (m==='dismantle'){ drag={kind:'dismantle',x0:x,y0:y,path:[[x,y]],times:[performance.now()],moved:false,from:new Map(),cut:false}; }
   else if (m==='cleave'){ const p=pickPiece(x,y); if (p) cleave(p); else { addSlashFx(x-30,y-30,x+30,y+30,2,'cleave'); sfx.slash(); } }
   else if (m==='fuga'){ if (!arrow) fuga(x,y); }
   else if (m==='grab'){ const p=pickPiece(x,y); if (p){ const [rx,ry]=toRest(p,x,y); grab={p,rx,ry,tx:x,ty:y}; drag={kind:'grab'}; cv.style.cursor='grabbing'; } }
@@ -1487,12 +1766,30 @@ cv.addEventListener('pointerdown',e=>{
 cv.addEventListener('pointermove',e=>{
   const [x,y]=toWorldPt(e); pointerW=[x,y];
   if (!drag) return;
-  if (drag.kind==='dismantle'){ drag.x1=x; drag.y1=y; if (!drag.moved && Math.hypot(x-drag.x0,y-drag.y0)>6){ drag.moved=true; if (state.alive && !voice.busy() && Math.random()<0.6) voice.gasp(); } }
+  if (drag.kind==='dismantle'){
+    const last=drag.path[drag.path.length-1];
+    if (Math.hypot(x-last[0],y-last[1])>1.6 && drag.path.length<600){ drag.path.push([x,y]); drag.times.push(performance.now()); }
+    if (!drag.moved && Math.hypot(x-drag.x0,y-drag.y0)>6){ drag.moved=true; if (state.alive && !voice.busy() && Math.random()<0.6) voice.gasp(); }
+    if (drag.moved && settings.blade==='live') liveCut();
+  }
   else if (drag.kind==='grab' && grab){ grab.tx=x; grab.ty=clamp(y,-600,-1); }
 });
+function dragFrom(d){ return p=>d.from.get(p.id)||0; }
+function dragTouch(d){ return p=>d.from.set(p.id,d.path.length-1); }
+function liveCut(){
+  const d=drag, h=cutPath(d.path,{push:45,live:true,from:dragFrom(d),onTouch:dragTouch(d)});
+  if (h){ sfx.slash(); if (!d.cut){ d.cut=true; if (!callout.recent()) callout.show('解','Dismantle'); } }
+}
 function endDrag(){
   if (!drag) return;
-  if (drag.kind==='dismantle'){ if (drag.moved && Math.hypot(drag.x1-drag.x0,drag.y1-drag.y0)>12) dismantle(drag.x0,drag.y0,drag.x1,drag.y1); else quickDismantle(drag.x0,drag.y0); }
+  if (drag.kind==='dismantle'){
+    const d=drag;
+    if (!d.moved) quickDismantle(d.x0,d.y0);
+    else if (settings.blade==='live'){
+      cutPath(d.path,{push:45,final:true,from:dragFrom(d),onTouch:dragTouch(d)});
+      fxs.push({kind:'path',pts:d.path.slice(),w:2.4,t:0,life:0.3}); markPath(d.path,false);
+    } else dismantlePath(d.path);
+  }
   if (drag.kind==='grab'){ grab=null; cv.style.cursor=mode==='grab'?'grab':'crosshair'; }
   drag=null;
 }
@@ -1507,11 +1804,27 @@ $('tSound').addEventListener('click',()=>{ muted=!muted; toggle('tSound',!muted)
 $('tReset').addEventListener('click',()=>spawn());
 window.addEventListener('keydown',e=>{
   if (!started) return;
+  if (e.target && e.target.tagName==='INPUT') return;
   const k=e.key.toLowerCase();
+  if (k==='escape') setPanel(false);
+  if (k==='s') setPanel($('panel').hidden);
   if (k==='1') setMode('dismantle'); else if (k==='2') setMode('cleave'); else if (k==='3') setMode('fuga');
   else if (k==='4'){ audioInit(); startDomain(); } else if (k==='5') setMode('grab');
   else if (k==='x') $('tXray').click(); else if (k==='t') $('tSlow').click(); else if (k==='m') $('tSound').click(); else if (k==='r') spawn();
 });
+function syncSettingsUI(){
+  document.querySelectorAll('#segSubject button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.v===settings.subject)));
+  document.querySelectorAll('#segBlade button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.v===settings.blade)));
+  $('subjectDesc').textContent=SUBJECTS[settings.subject].desc;
+  $('powRange').value=settings.power; $('powTxt').textContent=settings.power+'%';
+}
+function setPanel(open){ $('panel').hidden=!open; $('tSettings').setAttribute('aria-expanded',String(open)); }
+$('tSettings').addEventListener('click',e=>{ e.stopPropagation(); setPanel($('panel').hidden); });
+document.addEventListener('pointerdown',e=>{ if (!$('panel').hidden && !$('panel').contains(e.target) && e.target!==$('tSettings') && !$('tSettings').contains(e.target)) setPanel(false); });
+document.querySelectorAll('#segSubject button').forEach(b=>b.addEventListener('click',()=>{ settings.subject=b.dataset.v; subject=SUBJECTS[settings.subject]; saveSettings(); syncSettingsUI(); spawn(); }));
+document.querySelectorAll('#segBlade button').forEach(b=>b.addEventListener('click',()=>{ settings.blade=b.dataset.v; saveSettings(); syncSettingsUI(); }));
+$('powRange').addEventListener('input',e=>{ settings.power=+e.target.value; $('powTxt').textContent=settings.power+'%'; saveSettings(); });
+syncSettingsUI();
 let started=false;
 $('startBtn').addEventListener('click',()=>{ started=true; $('intro').hidden=true; audioInit(); });
 
